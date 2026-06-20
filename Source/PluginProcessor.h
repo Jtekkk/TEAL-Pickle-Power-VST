@@ -1,0 +1,127 @@
+/*
+    ==============================================================================
+
+    Pickle Power 🥒⚡
+    PluginProcessor.h
+
+    Audio processor: hosts the APVTS, owns the DSP chain and exposes a handful of
+    metering atomics for the editor.
+
+    Signal flow:
+        Input -> [Oversample up -> Brine -> Crunch -> Snap -> Fermentation ->
+                  Pickle Juice -> Oversample down] -> Width -> Mix -> Output ->
+                  True-Peak Limiter -> Output
+
+    ==============================================================================
+*/
+
+#pragma once
+
+#include <juce_audio_processors/juce_audio_processors.h>
+
+#include "Utils/Constants.h"
+#include "DSP/Oversampler.h"
+#include "DSP/BrineSaturator.h"
+#include "DSP/CrunchDesigner.h"
+#include "DSP/SnapExciter.h"
+#include "DSP/FermentationEngine.h"
+#include "DSP/PickleJuice.h"
+#include "DSP/TruePeakLimiter.h"
+
+namespace pp
+{
+    class PicklePowerProcessor : public juce::AudioProcessor,
+                                 private juce::AsyncUpdater
+    {
+    public:
+        PicklePowerProcessor();
+        ~PicklePowerProcessor() override = default;
+
+        //==========================================================================
+        void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+        void releaseResources() override {}
+        bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+        using juce::AudioProcessor::processBlock;   // keep the double-precision overload visible
+        void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+        //==========================================================================
+        juce::AudioProcessorEditor* createEditor() override;
+        bool hasEditor() const override { return true; }
+
+        const juce::String getName() const override { return meta::pluginName; }
+        bool acceptsMidi() const override  { return false; }
+        bool producesMidi() const override { return false; }
+        bool isMidiEffect() const override { return false; }
+        double getTailLengthSeconds() const override { return 0.0; }
+
+        int getNumPrograms() override { return 1; }
+        int getCurrentProgram() override { return 0; }
+        void setCurrentProgram (int) override {}
+        const juce::String getProgramName (int) override { return {}; }
+        void changeProgramName (int, const juce::String&) override {}
+
+        void getStateInformation (juce::MemoryBlock&) override;
+        void setStateInformation (const void*, int sizeInBytes) override;
+
+        //==========================================================================
+        juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
+
+        // Metering accessors for the editor (real-time safe, lock-free).
+        float getMeterRms()        const noexcept { return meterRms.load(); }
+        float getMeterPeak()       const noexcept { return meterPeak.load(); }
+        float getGainReductionDb() const noexcept { return meterGR.load(); }
+        bool  isNuclear()          const noexcept { return nuclearMode.load(); }
+
+        static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    private:
+        //==========================================================================
+        void prepareInternal (double sampleRate, int samplesPerBlock);
+        void handleAsyncUpdate() override;   // rebuilds oversampling off the audio thread
+
+        void applyWidth      (juce::AudioBuffer<float>&);
+        void applyMixAndGain (juce::AudioBuffer<float>&);
+        void updateMeters    (const juce::AudioBuffer<float>&);
+        void updateNuclearState();
+
+        //==========================================================================
+        juce::AudioProcessorValueTreeState apvts;
+
+        Oversampler        oversampler;
+        BrineSaturator     brineSat;
+        CrunchDesigner     crunchDesigner;
+        SnapExciter        snapExciter;
+        FermentationEngine fermentation;
+        PickleJuice        pickleJuice;
+        TruePeakLimiter    limiter;
+
+        juce::AudioBuffer<float> dryBuffer;
+        juce::SmoothedValue<float> widthSmoothed, mixSmoothed, outputSmoothed;
+
+        double hostSampleRate = 0.0;
+        int    hostBlock      = 0;
+        int    numChannels    = 2;
+        OversampleChoice currentOversampleChoice = OversampleChoice::Off;
+
+        std::atomic<float> meterRms  { 0.0f };
+        std::atomic<float> meterPeak { 0.0f };
+        std::atomic<float> meterGR   { 0.0f };
+        std::atomic<bool>  nuclearMode { false };
+
+        // Cached raw parameter pointers.
+        std::atomic<float>* pBypass       = nullptr;
+        std::atomic<float>* pBrine        = nullptr;
+        std::atomic<float>* pBrineType    = nullptr;
+        std::atomic<float>* pCrunch       = nullptr;
+        std::atomic<float>* pSnap         = nullptr;
+        std::atomic<float>* pFermentation = nullptr;
+        std::atomic<float>* pAge          = nullptr;
+        std::atomic<float>* pPickleJuice  = nullptr;
+        std::atomic<float>* pWidth        = nullptr;
+        std::atomic<float>* pMix          = nullptr;
+        std::atomic<float>* pOutput       = nullptr;
+        std::atomic<float>* pOversampling = nullptr;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerProcessor)
+    };
+}

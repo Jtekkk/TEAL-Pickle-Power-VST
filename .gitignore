@@ -1,0 +1,21 @@
+# Build output
+build/
+cmake-build-*/
+out/
+*.o
+*.obj
+
+# IDE
+.idea/
+.vscode/
+*.user
+*.vcxproj.user
+.DS_Store
+
+# JUCE fetched sources (when downloaded into the tree)
+JUCE/
+
+# Plugin bundles built in-tree
+*.vst3
+*.component
+*.app
