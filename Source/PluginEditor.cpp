@@ -41,6 +41,8 @@ namespace pp
         bypassAttachment = std::make_unique<APVTS::ButtonAttachment> (
             processorRef.getAPVTS(), id::bypass, bypassButton);
 
+        demoMode = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0") != "0";
+
         setSize (meta::editorWidth, meta::editorHeight);
         setResizable (false, false);
 
@@ -137,10 +139,10 @@ namespace pp
         // Left: jar with the dancing pickle inside, plus the output meter.
         auto left = content.removeFromLeft (288);
         jar.setBounds (left);
-        pickle.setBounds (left.reduced (44).withTrimmedTop (10));
+        pickle.setBounds (left.reduced (32).withTrimmedTop (16));
 
         content.removeFromLeft (8);
-        meter.setBounds (content.removeFromLeft (24));
+        meter.setBounds (content.removeFromLeft (34));
         content.removeFromLeft (16);
 
         // Right: control panel.
@@ -178,11 +180,21 @@ namespace pp
     //==============================================================================
     void PicklePowerEditor::timerCallback()
     {
-        const float rms  = processorRef.getMeterRms();
-        const float peak = processorRef.getMeterPeak();
-        const float gr   = processorRef.getGainReductionDb();
-        const bool  nuclear = processorRef.isNuclear();
-        const bool  clip = peak > 0.92f || gr > 1.0f;
+        float rms  = processorRef.getMeterRms();
+        float peak = processorRef.getMeterPeak();
+        float gr   = processorRef.getGainReductionDb();
+        const bool nuclear = processorRef.isNuclear();
+
+        if (demoMode)
+        {
+            demoPhase += 0.06f;
+            const float beat = std::pow (0.5f + 0.5f * std::sin (demoPhase * 3.0f), 4.0f);
+            rms  = 0.25f + 0.50f * beat;
+            peak = 0.40f + 0.55f * beat;
+            gr   = beat * 4.0f;
+        }
+
+        const bool clip = peak > 0.92f || gr > 1.0f;
 
         jar.update (rms);
         pickle.update (peak, clip, nuclear);

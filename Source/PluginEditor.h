@@ -64,6 +64,12 @@ namespace pp
         juce::Rectangle<int> panelArea;
         bool lastNuclear = false;
 
+        // Env-gated preview mode (PP_PICKLE_DEMO=1): synthesises a pulsing level so
+        // the pickle / jar / meter animate without an audio device. No effect on the
+        // audio path; useful for demos and screenshots.
+        bool  demoMode  = false;
+        float demoPhase = 0.0f;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerEditor)
     };
 }

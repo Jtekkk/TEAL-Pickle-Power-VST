@@ -4,9 +4,8 @@
     Pickle Power 🥒⚡
     PickleMeter.h
 
-    Vertical output meter with a peak hold and a gain-reduction indicator drawn
-    from the top. The editor feeds it RMS / peak / GR every frame via update();
-    the bar uses ballistic decay so it reads musically.
+    Vertical output meter: ballistic RMS bar with a green→yellow→red gradient,
+    a peak-hold cap, dB tick marks and a gain-reduction zone drawn from the top.
 
     ==============================================================================
 */
@@ -29,44 +28,56 @@ namespace pp
         void update (float rms, float peak, float grDb)
         {
             displayRms = juce::jmax (rms, displayRms * 0.85f);
-
-            if (peak >= displayPeak) displayPeak = peak;
-            else                     displayPeak *= 0.97f;
-
+            displayPeak = (peak >= displayPeak) ? peak : displayPeak * 0.96f;
             displayGr += (grDb - displayGr) * 0.3f;
             repaint();
         }
 
         void paint (juce::Graphics& g) override
         {
-            auto bounds = getLocalBounds().toFloat().reduced (2.0f);
+            auto bounds = getLocalBounds().toFloat();
+
+            auto labelArea = bounds.removeFromBottom (14.0f);
+            g.setColour (theme::textDim);
+            g.setFont (juce::Font (juce::FontOptions {}.withHeight (9.5f).withStyle ("Bold")));
+            g.drawText ("OUT", labelArea, juce::Justification::centred);
 
             g.setColour (theme::panel);
             g.fillRoundedRectangle (bounds, 4.0f);
 
-            auto barArea = bounds.reduced (3.0f);
+            auto bar = bounds.reduced (3.0f);
 
-            // RMS bar (bottom-up) with a green->yellow->red gradient.
-            const float h = barArea.getHeight() * juce::jlimit (0.0f, 1.0f, toNorm (displayRms));
-            auto bar = barArea.withTop (barArea.getBottom() - h);
+            // Gradient column (full height) revealed by the level bar.
+            juce::ColourGradient grad (theme::neonGreen, bar.getBottomLeft(),
+                                       theme::danger,     bar.getTopLeft(), false);
+            grad.addColour (0.55, theme::neonYellow);
+            grad.addColour (0.80, juce::Colour (0xffff9d3a));
 
-            juce::ColourGradient grad (theme::neonGreen, barArea.getBottomLeft(),
-                                       theme::danger,     barArea.getTopLeft(), false);
-            grad.addColour (0.6, theme::neonYellow);
+            const float h = bar.getHeight() * juce::jlimit (0.0f, 1.0f, toNorm (displayRms));
+            auto fill = bar.withTop (bar.getBottom() - h);
             g.setGradientFill (grad);
-            g.fillRoundedRectangle (bar, 2.0f);
+            g.fillRoundedRectangle (fill, 2.0f);
 
-            // Peak cap.
-            const float py = barArea.getBottom() - barArea.getHeight() * juce::jlimit (0.0f, 1.0f, toNorm (displayPeak));
-            g.setColour (theme::textBright);
-            g.fillRect (barArea.getX(), py - 1.0f, barArea.getWidth(), 2.0f);
+            // dB tick marks.
+            g.setFont (juce::Font (juce::FontOptions {}.withHeight (8.0f)));
+            for (float db : { 0.0f, -6.0f, -12.0f, -24.0f, -48.0f })
+            {
+                const float y = bar.getBottom() - bar.getHeight() * juce::jlimit (0.0f, 1.0f, dbToNorm (db));
+                g.setColour (theme::textDim.withAlpha (0.5f));
+                g.drawLine (bar.getX(), y, bar.getRight(), y, 0.5f);
+            }
+
+            // Peak-hold cap.
+            const float py = bar.getBottom() - bar.getHeight() * juce::jlimit (0.0f, 1.0f, toNorm (displayPeak));
+            g.setColour (displayPeak > 0.94f ? theme::danger : theme::textBright);
+            g.fillRect (bar.getX(), py - 1.0f, bar.getWidth(), 2.0f);
 
             // Gain reduction from the top.
             if (displayGr > 0.05f)
             {
-                const float grH = barArea.getHeight() * juce::jlimit (0.0f, 1.0f, displayGr / 12.0f);
-                g.setColour (theme::danger.withAlpha (0.55f));
-                g.fillRect (barArea.getX(), barArea.getY(), barArea.getWidth(), grH);
+                const float grH = bar.getHeight() * juce::jlimit (0.0f, 1.0f, displayGr / 12.0f);
+                g.setColour (theme::danger.withAlpha (0.5f));
+                g.fillRect (bar.getX(), bar.getY(), bar.getWidth(), grH);
             }
 
             g.setColour (theme::neonGreen.withAlpha (0.4f));
@@ -74,12 +85,8 @@ namespace pp
         }
 
     private:
-        // Map linear amplitude to a 0..1 meter position over a ~ -48..0 dB range.
-        static float toNorm (float lin)
-        {
-            const float db = juce::Decibels::gainToDecibels (lin, -48.0f);
-            return juce::jmap (db, -48.0f, 0.0f, 0.0f, 1.0f);
-        }
+        static float dbToNorm (float db) { return juce::jmap (db, -48.0f, 0.0f, 0.0f, 1.0f); }
+        static float toNorm (float lin)  { return dbToNorm (juce::Decibels::gainToDecibels (lin, -48.0f)); }
 
         float displayRms = 0.0f, displayPeak = 0.0f, displayGr = 0.0f;
 
