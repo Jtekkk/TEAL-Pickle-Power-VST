@@ -4,15 +4,18 @@
     Pickle Power 🥒⚡
     CrunchDesigner.h
 
-    Transient designer. A fast and a slow envelope follower track the signal; the
-    difference between them is a transient detector. The Crunch control (-1..+1)
-    maps that detector to a gain modulation:
+    Transient designer with independent Attack and Sustain control (SPL-style).
 
-        Crunch > 0   emphasise attacks   -> snappy, "crunchy"
-        Crunch < 0   soften attacks      -> rounder, more sustain / glue
+    Two pairs of envelope followers run on the mono-linked detection signal:
 
-    Detection is mono-linked and the resulting gain is applied to every channel
-    so the stereo image stays put.
+      • Attack pair  - a fast and a slow *attack* follower. Their positive
+        difference spikes at note onsets, giving an attack/transient detector.
+      • Sustain pair - a fast-release and a slow-release follower. The slow one
+        lags above the fast one during the decay/body, giving a sustain detector.
+
+    Attack (-1..+1) and Sustain (-1..+1) scale dB gain applied around those two
+    regions; the gain is mono-linked so the stereo image is preserved. At 0/0 the
+    stage is transparent.
 
     ==============================================================================
 */
@@ -32,24 +35,28 @@ namespace pp
         {
             sampleRate = newSampleRate;
 
-            attFast = tc (0.5f);    relFast = tc (60.0f);
-            attSlow = tc (18.0f);   relSlow = tc (140.0f);
+            aFastC = tc (0.3f);   aSlowC = tc (8.0f);    attRelC = tc (90.0f);
+            sAttC  = tc (5.0f);   sFastRelC = tc (45.0f); sSlowRelC = tc (320.0f);
 
-            amountSmoothed.reset (sampleRate, 0.02);
-            amountSmoothed.setCurrentAndTargetValue (0.0f);
+            attackSmoothed.reset (sampleRate, 0.02);
+            sustainSmoothed.reset (sampleRate, 0.02);
+            attackSmoothed.setCurrentAndTargetValue (0.0f);
+            sustainSmoothed.setCurrentAndTargetValue (0.0f);
 
             reset();
         }
 
         void reset()
         {
-            fastEnv = slowEnv = 0.0f;
+            aFast = aSlow = sFast = sSlow = 0.0f;
         }
 
-        /** @param crunch  -1..+1 */
-        void setParameters (float crunch)
+        /** @param attack   -1..+1
+            @param sustain  -1..+1 */
+        void setParameters (float attack, float sustain)
         {
-            amountSmoothed.setTargetValue (juce::jlimit (-1.0f, 1.0f, crunch));
+            attackSmoothed.setTargetValue (juce::jlimit (-1.0f, 1.0f, attack));
+            sustainSmoothed.setTargetValue (juce::jlimit (-1.0f, 1.0f, sustain));
         }
 
         void process (juce::dsp::AudioBlock<float>& block)
@@ -59,20 +66,26 @@ namespace pp
 
             for (size_t s = 0; s < numS; ++s)
             {
-                // Mono-linked detection: peak across channels.
                 float in = 0.0f;
                 for (size_t ch = 0; ch < numCh; ++ch)
                     in = juce::jmax (in, std::abs (block.getChannelPointer (ch)[s]));
 
-                fastEnv = follow (fastEnv, in, attFast, relFast);
-                slowEnv = follow (slowEnv, in, attSlow, relSlow);
+                // Attack detector (fast vs slow attack).
+                aFast = follow (aFast, in, aFastC, attRelC);
+                aSlow = follow (aSlow, in, aSlowC, attRelC);
+                const float attackTransient = juce::jmax (0.0f, aFast - aSlow);
 
-                const float transient = fastEnv - slowEnv;            // >0 on attacks
-                const float shaped    = std::tanh (transient * sensitivity);
-                const float crunch    = amountSmoothed.getNextValue();
+                // Sustain detector (slow release lags above fast release on the tail).
+                sFast = follow (sFast, in, sAttC, sFastRelC);
+                sSlow = follow (sSlow, in, sAttC, sSlowRelC);
+                const float sustainBody = juce::jmax (0.0f, sSlow - sFast);
 
-                const float gainDb = crunch * shaped * maxBoostDb;
-                const float gain   = juce::Decibels::decibelsToGain (gainDb);
+                const float attack  = attackSmoothed.getNextValue();
+                const float sustain = sustainSmoothed.getNextValue();
+
+                const float gainDb = attack  * std::tanh (attackTransient * sens) * maxAttDb
+                                   + sustain * std::tanh (sustainBody     * sens) * maxSusDb;
+                const float gain = juce::Decibels::decibelsToGain (gainDb);
 
                 for (size_t ch = 0; ch < numCh; ++ch)
                     block.getChannelPointer (ch)[s] *= gain;
@@ -85,20 +98,21 @@ namespace pp
             return (float) std::exp (-1.0 / (sampleRate * (ms * 0.001)));
         }
 
-        static float follow (float env, float in, float att, float rel) noexcept
+        static float follow (float env, float in, float attC, float relC) noexcept
         {
-            const float coeff = (in > env) ? att : rel;
-            return coeff * env + (1.0f - coeff) * in;
+            const float c = (in > env) ? attC : relC;
+            return c * env + (1.0f - c) * in;
         }
 
         double sampleRate = 44100.0;
-        float  attFast = 0.0f, relFast = 0.0f, attSlow = 0.0f, relSlow = 0.0f;
-        float  fastEnv = 0.0f, slowEnv = 0.0f;
+        float  aFastC = 0, aSlowC = 0, attRelC = 0, sAttC = 0, sFastRelC = 0, sSlowRelC = 0;
+        float  aFast = 0, aSlow = 0, sFast = 0, sSlow = 0;
 
-        juce::SmoothedValue<float> amountSmoothed;
+        juce::SmoothedValue<float> attackSmoothed, sustainSmoothed;
 
-        static constexpr float sensitivity = 7.0f;
-        static constexpr float maxBoostDb  = 12.0f;
+        static constexpr float sens     = 8.0f;
+        static constexpr float maxAttDb = 15.0f;
+        static constexpr float maxSusDb = 15.0f;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CrunchDesigner)
     };

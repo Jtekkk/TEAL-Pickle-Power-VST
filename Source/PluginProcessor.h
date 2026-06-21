@@ -20,6 +20,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "Utils/Constants.h"
+#include "Utils/PresetManager.h"
 #include "DSP/Oversampler.h"
 #include "DSP/BrineSaturator.h"
 #include "DSP/CrunchDesigner.h"
@@ -65,6 +66,7 @@ namespace pp
 
         //==========================================================================
         juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
+        PresetManager& getPresetManager() noexcept { return presetManager; }
 
         // Metering accessors for the editor (real-time safe, lock-free).
         float getMeterRms()        const noexcept { return meterRms.load(); }
@@ -86,6 +88,7 @@ namespace pp
 
         //==========================================================================
         juce::AudioProcessorValueTreeState apvts;
+        PresetManager presetManager { apvts };
 
         Oversampler        oversampler;
         BrineSaturator     brineSat;
@@ -109,12 +112,15 @@ namespace pp
         std::atomic<bool>  nuclearMode { false };
 
         // Cached raw parameter pointers.
-        std::atomic<float>* pBypass       = nullptr;
-        std::atomic<float>* pBrine        = nullptr;
-        std::atomic<float>* pBrineType    = nullptr;
-        std::atomic<float>* pCrunch       = nullptr;
-        std::atomic<float>* pSnap         = nullptr;
-        std::atomic<float>* pFermentation = nullptr;
+        std::atomic<float>* pBypass        = nullptr;
+        std::atomic<float>* pBrine         = nullptr;
+        std::atomic<float>* pBrineType     = nullptr;
+        std::atomic<float>* pCrunchAttack  = nullptr;
+        std::atomic<float>* pCrunchSustain = nullptr;
+        std::atomic<float>* pSnapLow       = nullptr;
+        std::atomic<float>* pSnapMid       = nullptr;
+        std::atomic<float>* pSnapHigh      = nullptr;
+        std::atomic<float>* pFermentation  = nullptr;
         std::atomic<float>* pAge          = nullptr;
         std::atomic<float>* pPickleJuice  = nullptr;
         std::atomic<float>* pWidth        = nullptr;

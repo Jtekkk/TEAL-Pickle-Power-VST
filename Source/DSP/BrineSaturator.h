@@ -53,8 +53,9 @@ namespace pp
             type = newType;
             brine01 = juce::jlimit (0.0f, 1.0f, brine01);
 
-            // 0..1  ->  ~1x .. ~30x drive (≈ +29 dB) with a musical curve.
-            const float drive = 1.0f + std::pow (brine01, 1.5f) * 29.0f;
+            // 0..1  ->  ~1x .. ~30x drive (≈ +29 dB) with a musical curve, then a
+            // per-flavour scaling so each brine bites differently.
+            const float drive = 1.0f + std::pow (brine01, 1.5f) * 29.0f * flavourDrive (newType);
             driveSmoothed.setTargetValue (drive);
             mixSmoothed.setTargetValue (brine01);
         }
@@ -111,12 +112,16 @@ namespace pp
                     return cubicSoftClip (driven);
 
                 case BrineType::Garlic:
-                    // Asymmetric bias generates even harmonics; DC block cleans up.
+                    // Strong asymmetric bias -> rich even harmonics; DC block cleans up.
                     return std::tanh (driven + garlicBias) - garlicOffset;
 
                 case BrineType::Spicy:
-                    return juce::jlimit (-1.0f, 1.0f,
-                        std::atan (driven * 1.6f) * (2.0f / juce::MathConstants<float>::pi) * 1.15f);
+                {
+                    // Hard arctan clip plus a touch of upper-harmonic fizz (oversampled).
+                    float a = std::atan (driven * 1.8f) * (2.0f / juce::MathConstants<float>::pi);
+                    a += 0.06f * std::sin (driven * 3.0f);
+                    return juce::jlimit (-1.0f, 1.0f, a * 1.1f);
+                }
 
                 case BrineType::numTypes:
                 default:
@@ -131,14 +136,27 @@ namespace pp
             return v - (v * v * v) / 3.0f;
         }
 
+        static float flavourDrive (BrineType t) noexcept
+        {
+            switch (t)
+            {
+                case BrineType::Dill:     return 0.70f;   // gentle
+                case BrineType::Kosher:   return 1.00f;   // classic
+                case BrineType::Garlic:   return 1.10f;   // warm + pushed
+                case BrineType::Spicy:    return 1.40f;   // aggressive
+                case BrineType::numTypes:
+                default:                  return 1.00f;
+            }
+        }
+
         //==========================================================================
         BrineType type = BrineType::Kosher;
         std::vector<DCBlocker> dcBlockers;
 
         juce::SmoothedValue<float> driveSmoothed, mixSmoothed;
 
-        static constexpr float garlicBias   = 0.35f;
-        inline static const float garlicOffset = std::tanh (0.35f);
+        static constexpr float garlicBias   = 0.5f;
+        inline static const float garlicOffset = std::tanh (0.5f);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BrineSaturator)
     };

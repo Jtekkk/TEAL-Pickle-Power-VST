@@ -52,11 +52,15 @@ namespace pp
         DancingPickleComponent pickle;
         PickleMeter            meter;
 
-        Knob brine, crunch, snap, ferment, age, juice, width, mix, output;
+        Knob brine, crunchAtk, crunchSus, snapLow, snapMid, snapHigh,
+             ferment, age, juice, width, mix, output;
 
         juce::ComboBox brineTypeBox, oversamplingBox;
         juce::Label    brineTypeLabel, oversamplingLabel;
         std::unique_ptr<APVTS::ComboBoxAttachment> brineTypeAttachment, oversamplingAttachment;
+
+        juce::ComboBox presetBox;
+        juce::Label    presetLabel;
 
         juce::ToggleButton bypassButton;
         std::unique_ptr<APVTS::ButtonAttachment> bypassAttachment;

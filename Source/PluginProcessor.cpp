@@ -19,12 +19,15 @@ namespace pp
                               .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
           apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
     {
-        pBypass       = apvts.getRawParameterValue (id::bypass);
-        pBrine        = apvts.getRawParameterValue (id::brine);
-        pBrineType    = apvts.getRawParameterValue (id::brineType);
-        pCrunch       = apvts.getRawParameterValue (id::crunch);
-        pSnap         = apvts.getRawParameterValue (id::snap);
-        pFermentation = apvts.getRawParameterValue (id::fermentation);
+        pBypass        = apvts.getRawParameterValue (id::bypass);
+        pBrine         = apvts.getRawParameterValue (id::brine);
+        pBrineType     = apvts.getRawParameterValue (id::brineType);
+        pCrunchAttack  = apvts.getRawParameterValue (id::crunchAttack);
+        pCrunchSustain = apvts.getRawParameterValue (id::crunchSustain);
+        pSnapLow       = apvts.getRawParameterValue (id::snapLow);
+        pSnapMid       = apvts.getRawParameterValue (id::snapMid);
+        pSnapHigh      = apvts.getRawParameterValue (id::snapHigh);
+        pFermentation  = apvts.getRawParameterValue (id::fermentation);
         pAge          = apvts.getRawParameterValue (id::age);
         pPickleJuice  = apvts.getRawParameterValue (id::pickleJuice);
         pWidth        = apvts.getRawParameterValue (id::width);
@@ -52,11 +55,23 @@ namespace pp
             ParameterID { id::brineType, 1 }, name::brineType, brineTypeChoices(), 1));
 
         layout.add (std::make_unique<AudioParameterFloat> (
-            ParameterID { id::crunch, 1 }, name::crunch,
+            ParameterID { id::crunchAttack, 1 }, name::crunchAttack,
             NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f, pct()));
 
         layout.add (std::make_unique<AudioParameterFloat> (
-            ParameterID { id::snap, 1 }, name::snap,
+            ParameterID { id::crunchSustain, 1 }, name::crunchSustain,
+            NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::snapLow, 1 }, name::snapLow,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::snapMid, 1 }, name::snapMid,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::snapHigh, 1 }, name::snapHigh,
             NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
 
         layout.add (std::make_unique<AudioParameterFloat> (
@@ -183,8 +198,11 @@ namespace pp
         // ---- push parameters into the DSP ------------------------------------
         brineSat.setParameters (pBrine->load() * 0.01f,
                                 (BrineType) (int) std::round (pBrineType->load()));
-        crunchDesigner.setParameters (pCrunch->load() * 0.01f);
-        snapExciter.setParameters (pSnap->load() * 0.01f);
+        crunchDesigner.setParameters (pCrunchAttack->load() * 0.01f,
+                                      pCrunchSustain->load() * 0.01f);
+        snapExciter.setParameters (pSnapLow->load()  * 0.01f,
+                                   pSnapMid->load()  * 0.01f,
+                                   pSnapHigh->load() * 0.01f);
         fermentation.setParameters (pFermentation->load() * 0.01f, pAge->load());
         pickleJuice.setParameters (pPickleJuice->load() * 0.01f);
 
@@ -281,11 +299,11 @@ namespace pp
 
     void PicklePowerProcessor::updateNuclearState()
     {
-        const bool n = pBrine->load()        > 95.0f
-                    && pSnap->load()         > 95.0f
-                    && pFermentation->load() > 95.0f
-                    && pPickleJuice->load()  > 95.0f
-                    && std::abs (pCrunch->load()) > 95.0f;
+        const bool n = pBrine->load()         > 95.0f
+                    && pSnapHigh->load()      > 95.0f
+                    && pFermentation->load()  > 95.0f
+                    && pPickleJuice->load()   > 95.0f
+                    && std::abs (pCrunchAttack->load()) > 95.0f;
 
         nuclearMode.store (n);
     }

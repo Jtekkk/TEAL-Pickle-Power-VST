@@ -25,8 +25,8 @@ namespace pp
     {
         inline constexpr const char* pluginName   = "Pickle Power";
         inline constexpr const char* version      = "0.1.0";
-        inline constexpr int         editorWidth  = 720;
-        inline constexpr int         editorHeight = 560;
+        inline constexpr int         editorWidth  = 760;
+        inline constexpr int         editorHeight = 600;
     }
 
     //==============================================================================
@@ -37,8 +37,11 @@ namespace pp
         inline constexpr const char* bypass        = "bypass";
         inline constexpr const char* brine         = "brine";
         inline constexpr const char* brineType     = "brineType";
-        inline constexpr const char* crunch        = "crunch";
-        inline constexpr const char* snap          = "snap";
+        inline constexpr const char* crunchAttack  = "crunchAttack";
+        inline constexpr const char* crunchSustain = "crunchSustain";
+        inline constexpr const char* snapLow       = "snapLow";
+        inline constexpr const char* snapMid       = "snapMid";
+        inline constexpr const char* snapHigh      = "snapHigh";
         inline constexpr const char* fermentation  = "fermentation";
         inline constexpr const char* age           = "age";
         inline constexpr const char* pickleJuice   = "pickleJuice";
@@ -53,8 +56,11 @@ namespace pp
         inline constexpr const char* bypass        = "Bypass";
         inline constexpr const char* brine         = "Brine";
         inline constexpr const char* brineType     = "Brine Type";
-        inline constexpr const char* crunch        = "Crunch";
-        inline constexpr const char* snap          = "Snap";
+        inline constexpr const char* crunchAttack  = "Attack";
+        inline constexpr const char* crunchSustain = "Sustain";
+        inline constexpr const char* snapLow       = "Low Air";
+        inline constexpr const char* snapMid       = "Mid Air";
+        inline constexpr const char* snapHigh      = "High Air";
         inline constexpr const char* fermentation  = "Fermentation";
         inline constexpr const char* age           = "Age";
         inline constexpr const char* pickleJuice   = "Pickle Juice";

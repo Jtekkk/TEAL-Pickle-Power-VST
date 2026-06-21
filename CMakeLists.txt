@@ -73,7 +73,8 @@ target_sources(PicklePower PRIVATE
     Source/GUI/BubbleSystem.h
     Source/GUI/PickleMeter.h
     Source/Utils/Constants.h
-    Source/Utils/Theme.h)
+    Source/Utils/Theme.h
+    Source/Utils/PresetManager.h)
 
 target_compile_definitions(PicklePower PUBLIC
     JUCE_WEB_BROWSER=0

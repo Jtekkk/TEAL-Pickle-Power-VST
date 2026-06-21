@@ -81,8 +81,8 @@ int main()
         juice.prepare (sr, channels);
 
         brine.setParameters (0.9f, pp::BrineType::Spicy);
-        crunch.setParameters (0.8f);
-        snap.setParameters (0.7f);
+        crunch.setParameters (0.8f, -0.3f);
+        snap.setParameters (0.5f, 0.5f, 0.7f);
         ferment.setParameters (0.95f, 0.85f);
         juice.setParameters (0.8f);
 

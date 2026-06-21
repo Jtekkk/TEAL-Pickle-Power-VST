@@ -21,20 +21,40 @@ namespace pp
         addAndMakeVisible (pickle);
         addAndMakeVisible (meter);
 
-        setupKnob (brine,   id::brine,        "BRINE");
-        setupKnob (crunch,  id::crunch,       "CRUNCH");
-        setupKnob (snap,    id::snap,         "SNAP");
-        setupKnob (ferment, id::fermentation, "FERMENT");
-        setupKnob (age,     id::age,          "AGE");
-        setupKnob (juice,   id::pickleJuice,  "PICKLE JUICE");
-        setupKnob (width,   id::width,        "WIDTH");
-        setupKnob (mix,     id::mix,          "MIX");
-        setupKnob (output,  id::output,       "OUTPUT");
+        setupKnob (brine,     id::brine,         "BRINE");
+        setupKnob (crunchAtk, id::crunchAttack,  "ATTACK");
+        setupKnob (crunchSus, id::crunchSustain, "SUSTAIN");
+        setupKnob (snapLow,   id::snapLow,       "LOW AIR");
+        setupKnob (snapMid,   id::snapMid,       "MID AIR");
+        setupKnob (snapHigh,  id::snapHigh,      "HIGH AIR");
+        setupKnob (ferment,   id::fermentation,  "FERMENT");
+        setupKnob (age,       id::age,           "AGE");
+        setupKnob (juice,     id::pickleJuice,   "PICKLE JUICE");
+        setupKnob (width,     id::width,         "WIDTH");
+        setupKnob (mix,       id::mix,           "MIX");
+        setupKnob (output,    id::output,        "OUTPUT");
 
         setupCombo (brineTypeBox, brineTypeLabel, brineTypeChoices(),
                     id::brineType, brineTypeAttachment, "FLAVOUR");
         setupCombo (oversamplingBox, oversamplingLabel, oversamplingChoices(),
                     id::oversampling, oversamplingAttachment, "OVERSAMPLING");
+
+        // Factory preset selector (not an APVTS parameter).
+        auto& pm = processorRef.getPresetManager();
+        presetBox.addItemList (pm.getNames(), 1);
+        presetBox.setSelectedItemIndex (pm.getCurrent(), juce::dontSendNotification);
+        presetBox.setJustificationType (juce::Justification::centred);
+        presetBox.onChange = [this]
+        {
+            processorRef.getPresetManager().apply (presetBox.getSelectedItemIndex());
+        };
+        addAndMakeVisible (presetBox);
+
+        presetLabel.setText ("PRESET", juce::dontSendNotification);
+        presetLabel.setJustificationType (juce::Justification::centredRight);
+        presetLabel.setColour (juce::Label::textColourId, theme::textDim);
+        presetLabel.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
+        addAndMakeVisible (presetLabel);
 
         bypassButton.setClickingTogglesState (true);
         addAndMakeVisible (bypassButton);
@@ -42,6 +62,12 @@ namespace pp
             processorRef.getAPVTS(), id::bypass, bypassButton);
 
         demoMode = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0") != "0";
+        if (demoMode)
+        {
+            const int demoPreset = 2;   // "Punchy Snare" — shows off the new controls
+            processorRef.getPresetManager().apply (demoPreset);
+            presetBox.setSelectedItemIndex (demoPreset, juce::dontSendNotification);
+        }
 
         setSize (meta::editorWidth, meta::editorHeight);
         setResizable (false, false);
@@ -133,6 +159,9 @@ namespace pp
 
         auto header = area.removeFromTop (52);
         bypassButton.setBounds (header.removeFromRight (54).reduced (10));
+        auto presetArea = header.removeFromRight (210).reduced (4, 12);
+        presetLabel.setBounds (presetArea.removeFromLeft (52));
+        presetBox.setBounds (presetArea);
 
         auto content = area.reduced (16, 8);
 
@@ -159,11 +188,14 @@ namespace pp
 
         right.removeFromTop (8);
 
-        const std::array<Knob*, 9> knobs {
-            &brine, &crunch, &snap, &ferment, &age, &juice, &width, &mix, &output
+        const std::array<Knob*, 12> knobs {
+            &brine,   &crunchAtk, &crunchSus,
+            &snapLow, &snapMid,   &snapHigh,
+            &ferment, &age,       &juice,
+            &width,   &mix,       &output
         };
 
-        const int cols = 3, rows = 3;
+        const int cols = 3, rows = 4;
         const int cw = right.getWidth()  / cols;
         const int chh = right.getHeight() / rows;
 
