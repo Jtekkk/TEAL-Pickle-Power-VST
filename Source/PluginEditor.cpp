@@ -12,6 +12,8 @@
 
 namespace pp
 {
+    static constexpr int userIdBase = 1001;   // ComboBox IDs for user presets start here
+
     PicklePowerEditor::PicklePowerEditor (PicklePowerProcessor& p)
         : AudioProcessorEditor (&p), processorRef (p)
     {
@@ -39,22 +41,25 @@ namespace pp
         setupCombo (oversamplingBox, oversamplingLabel, oversamplingChoices(),
                     id::oversampling, oversamplingAttachment, "OVERSAMPLING");
 
-        // Factory preset selector (not an APVTS parameter).
-        auto& pm = processorRef.getPresetManager();
-        presetBox.addItemList (pm.getNames(), 1);
-        presetBox.setSelectedItemIndex (pm.getCurrent(), juce::dontSendNotification);
+        // Preset selector (factory + user presets) and Save button.
         presetBox.setJustificationType (juce::Justification::centred);
+        presetBox.setTextWhenNothingSelected ("Presets");
         presetBox.onChange = [this]
         {
-            processorRef.getPresetManager().apply (presetBox.getSelectedItemIndex());
+            const int id = presetBox.getSelectedId();
+            auto& pm = processorRef.getPresetManager();
+            if (id >= 1 && id <= pm.getNumFactory())
+                pm.applyFactory (id - 1);
+            else if (id >= userIdBase && (id - userIdBase) < userPresetFiles.size())
+                pm.loadUserPreset (userPresetFiles[id - userIdBase]);
         };
         addAndMakeVisible (presetBox);
+        rebuildPresetMenu();
 
-        presetLabel.setText ("PRESET", juce::dontSendNotification);
-        presetLabel.setJustificationType (juce::Justification::centredRight);
-        presetLabel.setColour (juce::Label::textColourId, theme::textDim);
-        presetLabel.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
-        addAndMakeVisible (presetLabel);
+        saveButton.onClick = [this] { showSavePresetDialog(); };
+        saveButton.setColour (juce::TextButton::buttonColourId, theme::panel);
+        saveButton.setColour (juce::TextButton::textColourOffId, theme::neonLime);
+        addAndMakeVisible (saveButton);
 
         bypassButton.setClickingTogglesState (true);
         bypassButton.getProperties().set ("invertOnState", true);   // on == bypassed == dim
@@ -105,8 +110,8 @@ namespace pp
         if (demoMode)
         {
             const int demoPreset = 2;   // "Punchy Snare" — shows off the new controls
-            processorRef.getPresetManager().apply (demoPreset);
-            presetBox.setSelectedItemIndex (demoPreset, juce::dontSendNotification);
+            processorRef.getPresetManager().applyFactory (demoPreset);
+            presetBox.setSelectedId (demoPreset + 1, juce::dontSendNotification);
             startPage = (demoVal == "2") ? 1 : (demoVal == "3") ? 2 : 0;   // open PRO / EQ page
         }
 
@@ -228,6 +233,51 @@ namespace pp
         }
     }
 
+    void PicklePowerEditor::rebuildPresetMenu()
+    {
+        auto& pm = processorRef.getPresetManager();
+        presetBox.clear (juce::dontSendNotification);
+
+        const auto factory = pm.getFactoryNames();
+        for (int i = 0; i < factory.size(); ++i)
+            presetBox.addItem (factory[i], i + 1);
+
+        userPresetFiles = pm.getUserPresets();
+        if (! userPresetFiles.isEmpty())
+        {
+            presetBox.addSeparator();
+            for (int i = 0; i < userPresetFiles.size(); ++i)
+                presetBox.addItem (userPresetFiles[i].getFileNameWithoutExtension(), userIdBase + i);
+        }
+    }
+
+    void PicklePowerEditor::showSavePresetDialog()
+    {
+        auto* aw = new juce::AlertWindow ("Save Preset", "Name your pickle preset:",
+                                          juce::MessageBoxIconType::NoIcon);
+        aw->addTextEditor ("name", "My Pickle");
+        aw->addButton ("Save",   1, juce::KeyPress (juce::KeyPress::returnKey));
+        aw->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+        aw->enterModalState (true, juce::ModalCallbackFunction::create (
+            [this, aw] (int result)
+            {
+                if (result == 1)
+                {
+                    const auto name = aw->getTextEditorContents ("name").trim();
+                    if (name.isNotEmpty())
+                    {
+                        processorRef.getPresetManager().saveUserPreset (name);
+                        rebuildPresetMenu();
+                        const auto legal = juce::File::createLegalFileName (name);
+                        for (int i = 0; i < userPresetFiles.size(); ++i)
+                            if (userPresetFiles[i].getFileNameWithoutExtension() == legal)
+                                presetBox.setSelectedId (userIdBase + i, juce::dontSendNotification);
+                    }
+                }
+            }), true);
+    }
+
     //==============================================================================
     void PicklePowerEditor::paint (juce::Graphics& g)
     {
@@ -247,8 +297,8 @@ namespace pp
         // Title.
         const bool nuclear = processorRef.isNuclear();
         g.setColour (nuclear ? theme::nuclear : theme::neonGreen);
-        g.setFont (NeonLookAndFeel::pickleFont (26.0f, true));
-        g.drawText ("PICKLE POWER", 18, 8, 330, 28, juce::Justification::centredLeft);
+        g.setFont (NeonLookAndFeel::pickleFont (24.0f, true));
+        g.drawText ("PICKLE POWER", 18, 8, 300, 28, juce::Justification::centredLeft);
 
         g.setColour (theme::textDim);
         g.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
@@ -263,14 +313,14 @@ namespace pp
 
         auto header = area.removeFromTop (52);
         bypassButton.setBounds (header.removeFromRight (54).reduced (10));
-        auto presetArea = header.removeFromRight (200).reduced (4, 12);
-        presetLabel.setBounds (presetArea.removeFromLeft (46));
-        presetBox.setBounds (presetArea);
-        auto tabArea = header.removeFromRight (150).reduced (6, 13);
+        auto presetArea = header.removeFromRight (198).reduced (4, 11);
+        saveButton.setBounds (presetArea.removeFromRight (54).reduced (2, 1));
+        presetBox.setBounds (presetArea.reduced (2, 1));
+        auto tabArea = header.removeFromRight (168).reduced (4, 13);
         const int tw = tabArea.getWidth() / 3;
-        tabMain.setBounds (tabArea.removeFromLeft (tw).reduced (2, 0));
-        tabPro .setBounds (tabArea.removeFromLeft (tw).reduced (2, 0));
-        tabEq  .setBounds (tabArea.reduced (2, 0));
+        tabMain.setBounds (tabArea.removeFromLeft (tw).reduced (1, 0));
+        tabPro .setBounds (tabArea.removeFromLeft (tw).reduced (1, 0));
+        tabEq  .setBounds (tabArea.reduced (1, 0));
 
         auto content = area.reduced (16, 8);
 

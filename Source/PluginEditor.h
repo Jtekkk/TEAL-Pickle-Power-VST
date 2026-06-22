@@ -48,6 +48,8 @@ namespace pp
                           std::unique_ptr<APVTS::ButtonAttachment>&, const juce::String& labelText);
         void setPage (int page);
         void layoutGrid (juce::Rectangle<int> area, const std::vector<Knob*>& knobs, int cols, int rows);
+        void rebuildPresetMenu();
+        void showSavePresetDialog();
 
         PicklePowerProcessor& processorRef;
         NeonLookAndFeel lookAndFeel;
@@ -63,8 +65,10 @@ namespace pp
         juce::Label    brineTypeLabel, oversamplingLabel;
         std::unique_ptr<APVTS::ComboBoxAttachment> brineTypeAttachment, oversamplingAttachment;
 
-        juce::ComboBox presetBox;
-        juce::Label    presetLabel;
+        juce::ComboBox  presetBox;
+        juce::Label     presetLabel;
+        juce::TextButton saveButton { "SAVE" };
+        juce::Array<juce::File> userPresetFiles;
 
         juce::ToggleButton bypassButton;
         std::unique_ptr<APVTS::ButtonAttachment> bypassAttachment;
