@@ -10,6 +10,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+#include "BinaryData.h"
+
 namespace pp
 {
     //==============================================================================
@@ -58,6 +61,8 @@ namespace pp
 
         analyzerBuffer.assign ((size_t) analyzerFifo.getTotalSize(), 0.0f);
         demoInject = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0") != "0";
+
+        loadJingle();
     }
 
     //==============================================================================
@@ -233,6 +238,7 @@ namespace pp
         limiter.prepare (sampleRate, numChannels);
         autoGainGain = 1.0f;
         currentSpectralOn = pSpectralOn->load() > 0.5f;
+        prepareJingle (sampleRate);
 
         widthSmoothed .reset (sampleRate, 0.02);
         mixSmoothed   .reset (sampleRate, 0.02);
@@ -304,6 +310,7 @@ namespace pp
 
         if (pBypass->load() > 0.5f)
         {
+            mixJingle (buffer);
             updateMeters (buffer);
             pushAnalyzer (buffer);
             return;
@@ -373,6 +380,7 @@ namespace pp
         applyWidth (buffer);
         applyMixAndGain (buffer, agOn);
 
+        mixJingle (buffer);   // pre-limiter so the jingle stays peak-safe
         limiter.process (block);
 
         updateMeters (buffer);
@@ -494,6 +502,65 @@ namespace pp
         meterRms.store (std::sqrt (sumSq / (float) (numCh * numSamples)));
         meterPeak.store (peak);
         meterGR.store (limiter.getGainReductionDb());
+    }
+
+    void PicklePowerProcessor::loadJingle()
+    {
+        juce::MP3AudioFormat fmt;
+        auto* stream = new juce::MemoryInputStream (BinaryData::TEAL_pickle_power_mp3,
+                                                    (size_t) BinaryData::TEAL_pickle_power_mp3Size, false);
+        if (auto* raw = fmt.createReaderFor (stream, true))   // takes ownership of stream
+        {
+            std::unique_ptr<juce::AudioFormatReader> reader (raw);
+            const int len = (int) reader->lengthInSamples;
+            if (len > 0)
+            {
+                jingleSource.setSize ((int) juce::jmax (1u, reader->numChannels), len);
+                reader->read (&jingleSource, 0, len, 0, true, true);
+                jingleSourceRate = reader->sampleRate;
+            }
+        }
+    }
+
+    void PicklePowerProcessor::prepareJingle (double hostRate)
+    {
+        jinglePos = -1;
+        if (jingleSource.getNumSamples() == 0 || jingleSourceRate <= 0.0 || hostRate <= 0.0)
+            return;
+
+        const double ratio = jingleSourceRate / hostRate;   // input samples per output sample
+        const int srcCh  = jingleSource.getNumChannels();
+        const int outLen = (int) std::floor ((double) jingleSource.getNumSamples() / ratio);
+        if (outLen <= 0)
+            return;
+
+        jingleBuffer.setSize (2, outLen);
+        jingleBuffer.clear();
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            juce::LagrangeInterpolator interp;
+            interp.reset();
+            interp.process (ratio, jingleSource.getReadPointer (juce::jmin (ch, srcCh - 1)),
+                            jingleBuffer.getWritePointer (ch), outLen);
+        }
+    }
+
+    void PicklePowerProcessor::mixJingle (juce::AudioBuffer<float>& buffer)
+    {
+        if (jingleTrigger.exchange (false))
+            jinglePos = 0;
+
+        if (jinglePos < 0 || jingleBuffer.getNumSamples() == 0)
+            return;
+
+        const int n = juce::jmin (buffer.getNumSamples(), jingleBuffer.getNumSamples() - jinglePos);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.addFrom (ch, 0, jingleBuffer,
+                            juce::jmin (ch, jingleBuffer.getNumChannels() - 1), jinglePos, n, 0.85f);
+
+        jinglePos += n;
+        if (jinglePos >= jingleBuffer.getNumSamples())
+            jinglePos = -1;
     }
 
     void PicklePowerProcessor::pushAnalyzer (const juce::AudioBuffer<float>& buffer)

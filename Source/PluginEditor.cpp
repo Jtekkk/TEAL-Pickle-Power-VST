@@ -24,6 +24,9 @@ namespace pp
         addAndMakeVisible (meter);
         addAndMakeVisible (analyzer);
 
+        pickleButton.onClick = [this] { processorRef.triggerJingle(); };
+        addAndMakeVisible (pickleButton);
+
         setupKnob (brine,     id::brine,         "BRINE");
         setupKnob (crunchAtk, id::crunchAttack,  "ATTACK");
         setupKnob (crunchSus, id::crunchSustain, "SUSTAIN");
@@ -312,13 +315,13 @@ namespace pp
         const bool nuclear = processorRef.isNuclear();
         g.setColour (nuclear ? theme::nuclear : theme::neonGreen);
         g.setFont (NeonLookAndFeel::pickleFont (24.0f, true));
-        g.drawText ("PICKLE POWER", 18, 8, 300, 28, juce::Justification::centredLeft);
+        g.drawText ("PICKLE POWER", 52, 8, 280, 28, juce::Justification::centredLeft);
 
         g.setColour (theme::textDim);
         g.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
         g.drawText (nuclear ? "* * *  NUCLEAR PICKLE MODE  * * *  v" + juce::String (meta::version)
                             : "BRINE - CRUNCH - SNAP - FERMENT   v" + juce::String (meta::version),
-                    20, 35, 340, 14, juce::Justification::centredLeft);
+                    52, 35, 280, 14, juce::Justification::centredLeft);
     }
 
     void PicklePowerEditor::resized()
@@ -326,6 +329,7 @@ namespace pp
         auto area = getLocalBounds();
 
         auto header = area.removeFromTop (52);
+        pickleButton.setBounds (14, 8, 32, 36);
         bypassButton.setBounds (header.removeFromRight (54).reduced (10));
         auto presetArea = header.removeFromRight (198).reduced (4, 11);
         saveButton.setBounds (presetArea.removeFromRight (54).reduced (2, 1));

@@ -40,5 +40,33 @@ Source: "{#ArtefactsDir}\VST3\Pickle Power.vst3\*"; \
 Source: "{#ArtefactsDir}\Standalone\Pickle Power.exe"; \
     DestDir: "{app}"; Components: standalone; Flags: ignoreversion
 
+; Jingle: extracted to a temp folder and played while the installer runs.
+Source: "..\..\assets\audio\TEAL_pickle_power.mp3"; Flags: dontcopy
+
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\Pickle Power.exe"; Components: standalone
+
+[Code]
+function mciSendString(lpstrCommand, lpstrReturnString: string;
+  uReturnLength: Cardinal; hwndCallback: Integer): Integer;
+  external 'mciSendStringW@winmm.dll stdcall';
+
+procedure PlayJingle;
+var
+  TmpFile: string;
+begin
+  ExtractTemporaryFile('TEAL_pickle_power.mp3');
+  TmpFile := ExpandConstant('{tmp}\TEAL_pickle_power.mp3');
+  mciSendString('open "' + TmpFile + '" type mpegvideo alias picklejingle', '', 0, 0);
+  mciSendString('play picklejingle', '', 0, 0);
+end;
+
+procedure InitializeWizard();
+begin
+  PlayJingle;   { 🥒⚡ play the Pickle Power jingle when the installer opens }
+end;
+
+procedure DeinitializeSetup();
+begin
+  mciSendString('close picklejingle', '', 0, 0);
+end;

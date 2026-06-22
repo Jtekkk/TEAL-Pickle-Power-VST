@@ -17,6 +17,7 @@
 #include "GUI/PickleJarComponent.h"
 #include "GUI/PickleMeter.h"
 #include "GUI/SpectrumAnalyzer.h"
+#include "GUI/PickleButton.h"
 
 namespace pp
 {
@@ -74,6 +75,8 @@ namespace pp
 
         juce::ToggleButton bypassButton;
         std::unique_ptr<APVTS::ButtonAttachment> bypassAttachment;
+
+        PickleButton pickleButton;   // plays the jingle
 
         // Tabbed pages: 0 = MAIN, 1 = PRO, 2 = EQ
         juce::TextButton tabMain { "MAIN" }, tabPro { "PRO" }, tabEq { "EQ" };

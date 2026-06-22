@@ -81,6 +81,9 @@ namespace pp
         /** Drains up to @p maxSamples of recent output (mono) for the UI analyzer. */
         int readAnalyzer (float* dest, int maxSamples);
 
+        /** Easter egg: trigger the Pickle Power jingle (mixed into the output). */
+        void triggerJingle() noexcept { jingleTrigger.store (true); }
+
         static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     private:
@@ -93,6 +96,9 @@ namespace pp
         void updateMeters    (const juce::AudioBuffer<float>&);
         void updateNuclearState();
         void pushAnalyzer    (const juce::AudioBuffer<float>&);
+        void loadJingle();
+        void prepareJingle   (double hostRate);
+        void mixJingle       (juce::AudioBuffer<float>&);
 
         static void encodeMidSide (juce::AudioBuffer<float>&);
         static void decodeMidSide (juce::AudioBuffer<float>&);
@@ -138,6 +144,13 @@ namespace pp
         // Lock-free output tap for the UI spectrum analyzer.
         juce::AbstractFifo analyzerFifo { 1 << 14 };
         std::vector<float> analyzerBuffer;
+
+        // Embedded jingle (decoded), played on the pickle-button easter egg.
+        juce::AudioBuffer<float> jingleSource;   // decoded at its native rate
+        double jingleSourceRate = 0.0;
+        juce::AudioBuffer<float> jingleBuffer;   // resampled to host rate
+        std::atomic<bool> jingleTrigger { false };
+        int jinglePos = -1;
 
         // Cached raw parameter pointers.
         std::atomic<float>* pBypass        = nullptr;

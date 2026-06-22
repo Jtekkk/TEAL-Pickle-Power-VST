@@ -79,18 +79,24 @@ target_sources(PicklePower PRIVATE
     Source/Utils/Theme.h
     Source/Utils/PresetManager.h)
 
+# Embed the Pickle Power jingle so the editor's pickle button can play it.
+juce_add_binary_data(PicklePowerData SOURCES assets/audio/TEAL_pickle_power.mp3)
+
 target_compile_definitions(PicklePower PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_STRICT_REFCOUNTEDPOINTER=1
+    JUCE_USE_MP3AUDIOFORMAT=1
     # Splash screen left on: disabling it requires a JUCE licence for closed-source
     # commercial releases. Set to 0 once you hold the appropriate licence.
     JUCE_DISPLAY_SPLASH_SCREEN=1)
 
 target_link_libraries(PicklePower
     PRIVATE
+        PicklePowerData
         juce::juce_audio_utils
+        juce::juce_audio_formats
         juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
