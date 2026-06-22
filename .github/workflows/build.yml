@@ -191,7 +191,7 @@ jobs:
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: Pickle Power ${{ steps.ver.outputs.tag }}
+          name: TEAL-Pickle-Power-VST ${{ steps.ver.outputs.tag }}
           files: release/*
           generate_release_notes: true
           fail_on_unmatched_files: false
