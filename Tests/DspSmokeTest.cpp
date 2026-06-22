@@ -382,6 +382,46 @@ int main()
         check (peakPlus > peakMinus * 1.05f,
                "Crunch Attack+ is punchier than Attack- (" + juce::String (peakPlus, 3)
                    + " > " + juce::String (peakMinus, 3) + ")");
+
+        // Pickle Juice auto-makeup: driven hard, output stays near input loudness.
+        {
+            const float jin = 0.4f / std::sqrt (2.0f);
+            pp::PickleJuice j;
+            j.prepare (sr, channels);
+            j.setParameters (0.9f);
+            juce::AudioBuffer<float> buf (channels, block);
+            float r = 0.0f;
+            for (int n = 0; n < 80; ++n)
+            {
+                fillSine (buf, sr, 220.0f, 0.4f);
+                juce::dsp::AudioBlock<float> blk (buf);
+                j.process (blk);
+                r = buf.getRMSLevel (0, 0, block);
+            }
+            check (r > jin * 0.5f && r < jin * 2.0f,
+                   "Pickle Juice loudness-matched at 90% (in " + juce::String (jin, 3)
+                       + " -> out " + juce::String (r, 3) + ")");
+        }
+
+        // Multiband: all bands driven, sum stays near input loudness.
+        {
+            const float min_ = 0.4f / std::sqrt (2.0f);
+            pp::MultibandSaturator m;
+            m.prepare (sr, channels, block);
+            m.setParameters (0.9f, 0.9f, 0.9f, 200.0f, 2500.0f);
+            juce::AudioBuffer<float> buf (channels, block);
+            float r = 0.0f;
+            for (int n = 0; n < 80; ++n)
+            {
+                fillSine (buf, sr, 500.0f, 0.4f);
+                juce::dsp::AudioBlock<float> blk (buf);
+                m.process (blk);
+                r = buf.getRMSLevel (0, 0, block);
+            }
+            check (r > min_ * 0.4f && r < min_ * 2.2f,
+                   "Multiband loudness-matched when driven (in " + juce::String (min_, 3)
+                       + " -> out " + juce::String (r, 3) + ")");
+        }
     }
 
     //==========================================================================

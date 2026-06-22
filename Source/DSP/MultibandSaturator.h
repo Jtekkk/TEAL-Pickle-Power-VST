@@ -17,6 +17,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "DSPHelpers.h"
 
 namespace pp
 {
@@ -44,6 +45,10 @@ namespace pp
             midSm .reset (sampleRate, 0.02);  midSm .setCurrentAndTargetValue (0.0f);
             highSm.reset (sampleRate, 0.02);  highSm.setCurrentAndTargetValue (0.0f);
 
+            matchLow.prepare (sampleRate);
+            matchMid.prepare (sampleRate);
+            matchHigh.prepare (sampleRate);
+
             setCrossovers (200.0f, 2500.0f, true);
             reset();
         }
@@ -52,6 +57,9 @@ namespace pp
         {
             for (auto* f : { &lpLow, &hpLow, &lpHigh, &hpHigh, &apHigh })
                 f->reset();
+            matchLow.reset();
+            matchMid.reset();
+            matchHigh.reset();
         }
 
         /** @param low,mid,high   0..1 saturation amount per band
@@ -69,12 +77,17 @@ namespace pp
         {
             const auto numCh = block.getNumChannels();
             const auto numS  = block.getNumSamples();
+            if (numCh == 0) return;
+            const float inv = 1.0f / (float) numCh;
 
             for (size_t s = 0; s < numS; ++s)
             {
                 const float aL = lowSm.getNextValue();
                 const float aM = midSm.getNextValue();
                 const float aH = highSm.getNextValue();
+                const float mkL = matchLow.makeup, mkM = matchMid.makeup, mkH = matchHigh.makeup;
+
+                float inL = 0, outL = 0, inM = 0, outM = 0, inH = 0, outH = 0;
 
                 for (size_t ch = 0; ch < numCh; ++ch)
                 {
@@ -88,20 +101,31 @@ namespace pp
                     float high = hpHigh.processSample (c, hi);
                     low = apHigh.processSample (c, low);   // align phase with the mid/high split
 
-                    d[s] = satBand (low, aL) + satBand (mid, aM) + satBand (high, aH);
+                    const float wL = satRaw (low,  aL);
+                    const float wM = satRaw (mid,  aM);
+                    const float wH = satRaw (high, aH);
+
+                    d[s] = (low  + aL * (wL * mkL - low))
+                         + (mid  + aM * (wM * mkM - mid))
+                         + (high + aH * (wH * mkH - high));
+
+                    inL += std::abs (low);  outL += std::abs (wL);
+                    inM += std::abs (mid);  outM += std::abs (wM);
+                    inH += std::abs (high); outH += std::abs (wH);
                 }
+
+                matchLow .update (inL * inv, outL * inv);
+                matchMid .update (inM * inv, outM * inv);
+                matchHigh.update (inH * inv, outH * inv);
             }
         }
 
     private:
-        static float satBand (float b, float amount) noexcept
+        // Raw per-band saturation (pre makeup); loudness restored by the matchers.
+        static float satRaw (float b, float amount) noexcept
         {
-            if (amount <= 1.0e-4f)
-                return b;
-
             const float drive = 1.0f + amount * 9.0f;
-            const float wet   = std::tanh (b * drive) / drive * std::pow (drive, 0.25f);
-            return b + amount * (wet - b);
+            return std::tanh (b * drive);
         }
 
         void setCrossovers (float freqLow, float freqHigh, bool force)
@@ -125,6 +149,7 @@ namespace pp
 
         juce::dsp::LinkwitzRileyFilter<float> lpLow, hpLow, lpHigh, hpHigh, apHigh;
         juce::SmoothedValue<float> lowSm, midSm, highSm;
+        dsp::LevelMatcher matchLow, matchMid, matchHigh;
         float curFreqLow = 0.0f, curFreqHigh = 0.0f;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultibandSaturator)
