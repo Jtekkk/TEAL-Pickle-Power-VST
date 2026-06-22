@@ -141,13 +141,31 @@ jobs:
   release:
     name: Release
     needs: build
+    # Publish on a v* tag push, a manual dispatch with make_release, or a push
+    # whose commit message contains [publish-release] (the env here can't push
+    # tags, so the commit-message marker is the usable trigger).
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true')
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.make_release == 'true') ||
+      contains(github.event.head_commit.message, '[publish-release]')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: ver
+        shell: bash
+        run: |
+          v="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' Source/Utils/Constants.h | head -1)"
+          dispatch_tag="${{ github.event.inputs.tag }}"
+          if [ -n "$dispatch_tag" ]; then tag="$dispatch_tag";
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then tag="${{ github.ref_name }}";
+          else tag="v$v"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $tag"
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -163,9 +181,9 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: Pickle Power ${{ github.event.inputs.tag || github.ref_name }}
+          name: Pickle Power ${{ steps.ver.outputs.tag }}
           files: release/*
           generate_release_notes: true
           fail_on_unmatched_files: false
