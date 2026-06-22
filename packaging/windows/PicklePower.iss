@@ -9,7 +9,7 @@
 ; ============================================================================
 
 #define MyAppName       "Pickle Power"
-#define MyAppVersion    "0.1.0"
+#define MyAppVersion    "1.0.0"
 #define MyPublisher     "Pickle Audio"
 #define ArtefactsDir    "..\..\build\PicklePower_artefacts\Release"
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(PicklePower VERSION 0.1.0 LANGUAGES C CXX)
+project(PicklePower VERSION 1.0.0 LANGUAGES C CXX)
 
 #==============================================================================
 # Pickle Power 🥒⚡  —  JUCE 8 audio plugin (VST3 / AU / Standalone)
