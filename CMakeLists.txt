@@ -60,6 +60,7 @@ target_sources(PicklePower PRIVATE
 target_sources(PicklePower PRIVATE
     Source/PluginProcessor.h
     Source/PluginEditor.h
+    Source/DSP/DSPHelpers.h
     Source/DSP/Oversampler.h
     Source/DSP/BrineSaturator.h
     Source/DSP/CrunchDesigner.h

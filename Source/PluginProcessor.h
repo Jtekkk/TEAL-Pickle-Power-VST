@@ -51,6 +51,7 @@ namespace pp
         //==========================================================================
         juce::AudioProcessorEditor* createEditor() override;
         bool hasEditor() const override { return true; }
+        juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter (id::bypass); }
 
         const juce::String getName() const override { return meta::pluginName; }
         bool acceptsMidi() const override  { return false; }
@@ -126,6 +127,12 @@ namespace pp
         int    numChannels    = 2;
         OversampleChoice currentOversampleChoice = OversampleChoice::Off;
         bool   currentSpectralOn = false;   // re-prepare PDC when this toggles
+
+        // Latency-compensated bypass: delays the dry signal by the reported latency
+        // so a bypassed signal stays time-aligned with the processed one.
+        int reportedLatency = 0;
+        std::vector<std::vector<float>> bypassRing;
+        int bypassWrite = 0;
 
         float  autoGainGain = 1.0f;   // smoothed auto-gain compensation
 

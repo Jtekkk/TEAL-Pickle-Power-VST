@@ -22,6 +22,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "DSPHelpers.h"
 #include "../Utils/Constants.h"
 
 namespace pp
@@ -34,7 +35,8 @@ namespace pp
         void prepare (double newSampleRate, int numChannels)
         {
             sampleRate = newSampleRate;
-            dcBlockers.assign ((size_t) juce::jmax (1, numChannels), DCBlocker {});
+            dcBlockers.assign ((size_t) juce::jmax (1, numChannels), dsp::DCBlocker {});
+            levelMatcher.prepare (sampleRate);
 
             rmsCoeff  = (float) std::exp (-1.0 / (sampleRate * 0.080));   // 80 ms RMS
             peakDecay = (float) std::exp (-1.0 / (sampleRate * 0.250));   // 250 ms peak hold
@@ -53,6 +55,7 @@ namespace pp
             harmonicAge = 0.0f;
             for (auto& dc : dcBlockers)
                 dc.reset();
+            levelMatcher.reset();
         }
 
         /** @param ferment01  0..1 amount
@@ -96,18 +99,24 @@ namespace pp
                     1.0f + ferment * (maturity * 5.0f + harmonicAge * ageCeil * 12.0f));
 
                 const float bias = juce::jlimit (0.0f, 0.4f, (crest - 3.0f) * 0.04f) * ferment;
-                const float comp = 1.0f / std::sqrt (drive);
                 const float biasTanh = std::tanh (bias * drive);
+                const float mk = levelMatcher.makeup;
 
-                // ---- shaping -----------------------------------------------------
+                // ---- shaping (loudness-matched, so drive adds grit not volume) ----
+                float inMono = 0.0f, outMono = 0.0f;
                 for (size_t ch = 0; ch < numCh; ++ch)
                 {
                     auto* d = block.getChannelPointer (ch);
                     const float x = d[s];
-                    float wet = (std::tanh ((x + bias) * drive) - biasTanh) * comp;
+                    float wet = std::tanh ((x + bias) * drive) - biasTanh;
                     wet = dcBlockers[ch % dcBlockers.size()].process (wet);
-                    d[s] = x + ferment * (wet - x);
+
+                    d[s] = x + ferment * (wet * mk - x);
+                    inMono  += std::abs (x);
+                    outMono += std::abs (wet);
                 }
+                if (numCh > 0)
+                    levelMatcher.update (inMono / (float) numCh, outMono / (float) numCh);
             }
         }
 
@@ -119,20 +128,6 @@ namespace pp
         }
 
     private:
-        struct DCBlocker
-        {
-            float x1 = 0.0f, y1 = 0.0f;
-            static constexpr float R = 0.9975f;
-
-            float process (float x) noexcept
-            {
-                const float y = x - x1 + R * y1;
-                x1 = x; y1 = y;
-                return y;
-            }
-            void reset() noexcept { x1 = y1 = 0.0f; }
-        };
-
         double sampleRate = 44100.0;
 
         float rmsCoeff = 0.0f, peakDecay = 0.0f, ageCoeff = 0.0f;
@@ -141,7 +136,8 @@ namespace pp
         float maturity = 0.0f, ageCeil = 1.0f;
         juce::SmoothedValue<float> fermentSmoothed;
 
-        std::vector<DCBlocker> dcBlockers;
+        std::vector<dsp::DCBlocker> dcBlockers;
+        dsp::LevelMatcher levelMatcher;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FermentationEngine)
     };

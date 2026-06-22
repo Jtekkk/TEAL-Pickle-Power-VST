@@ -7,13 +7,15 @@
     Multi-flavour waveshaping saturation. Each "brine" reshapes the transfer
     curve so it generates a different harmonic fingerprint:
 
-        Dill    - gentle, mostly odd harmonics (tanh)
+        Dill    - gentle, soft odd harmonics (tanh)
         Kosher  - balanced cubic soft-clip
         Garlic  - asymmetric, even-harmonic warmth (biased tanh + DC block)
-        Spicy   - aggressive arctan drive, biting highs
+        Spicy   - aggressive: hard-edged tanh/clip blend, biting odd harmonics
 
-    The Brine amount (0..1) drives the input into the curve and crossfades the
-    shaped signal back against the dry signal so 0 % is bit-transparent.
+    The Brine amount (0..1) drives the input into the curve; an online loudness
+    matcher keeps the shaped signal at roughly the input level so the control adds
+    grit rather than volume. The result is crossfaded against the dry signal by the
+    same amount, so 0 % is transparent.
 
     ==============================================================================
 */
@@ -21,6 +23,7 @@
 #pragma once
 
 #include <juce_dsp/juce_dsp.h>
+#include "DSPHelpers.h"
 #include "../Utils/Constants.h"
 
 namespace pp
@@ -32,7 +35,8 @@ namespace pp
 
         void prepare (double sampleRate, int numChannels)
         {
-            dcBlockers.assign ((size_t) juce::jmax (1, numChannels), DCBlocker {});
+            dcBlockers.assign ((size_t) juce::jmax (1, numChannels), dsp::DCBlocker {});
+            levelMatcher.prepare (sampleRate);
 
             driveSmoothed.reset (sampleRate, 0.02);
             mixSmoothed  .reset (sampleRate, 0.02);
@@ -44,6 +48,7 @@ namespace pp
         {
             for (auto& dc : dcBlockers)
                 dc.reset();
+            levelMatcher.reset();
         }
 
         /** @param brine01  saturation amount, 0..1
@@ -53,8 +58,7 @@ namespace pp
             type = newType;
             brine01 = juce::jlimit (0.0f, 1.0f, brine01);
 
-            // 0..1  ->  ~1x .. ~30x drive (≈ +29 dB) with a musical curve, then a
-            // per-flavour scaling so each brine bites differently.
+            // 0..1 -> ~1x .. ~30x drive with a musical curve, scaled per flavour.
             const float drive = 1.0f + std::pow (brine01, 1.5f) * 29.0f * flavourDrive (newType);
             driveSmoothed.setTargetValue (drive);
             mixSmoothed.setTargetValue (brine01);
@@ -64,42 +68,32 @@ namespace pp
         {
             const auto numCh = block.getNumChannels();
             const auto numS  = block.getNumSamples();
+            if (numCh == 0) return;
+            const float inv = 1.0f / (float) numCh;
 
             for (size_t s = 0; s < numS; ++s)
             {
                 const float drive = driveSmoothed.getNextValue();
                 const float mix   = mixSmoothed.getNextValue();
-                const float comp  = 1.0f / std::sqrt (juce::jmax (1.0f, drive));
+                const float mk    = levelMatcher.makeup;
 
+                float inMono = 0.0f, outMono = 0.0f;
                 for (size_t ch = 0; ch < numCh; ++ch)
                 {
-                    auto* d   = block.getChannelPointer (ch);
+                    auto* d = block.getChannelPointer (ch);
                     const float x = d[s];
-                    float wet = shape (x * drive) * comp;
+                    float wet = shape (x * drive);
                     wet = dcBlockers[ch % dcBlockers.size()].process (wet);
-                    d[s] = x + mix * (wet - x);
+
+                    d[s] = x + mix * (wet * mk - x);
+                    inMono  += std::abs (x);
+                    outMono += std::abs (wet);
                 }
+                levelMatcher.update (inMono * inv, outMono * inv);
             }
         }
 
     private:
-        //==========================================================================
-        struct DCBlocker
-        {
-            float x1 = 0.0f, y1 = 0.0f;
-            static constexpr float R = 0.9975f;
-
-            float process (float x) noexcept
-            {
-                const float y = x - x1 + R * y1;
-                x1 = x;
-                y1 = y;
-                return y;
-            }
-
-            void reset() noexcept { x1 = y1 = 0.0f; }
-        };
-
         //==========================================================================
         float shape (float driven) const noexcept
         {
@@ -112,15 +106,16 @@ namespace pp
                     return cubicSoftClip (driven);
 
                 case BrineType::Garlic:
-                    // Strong asymmetric bias -> rich even harmonics; DC block cleans up.
+                    // Asymmetric bias -> rich even harmonics; DC block cleans up.
                     return std::tanh (driven + garlicBias) - garlicOffset;
 
                 case BrineType::Spicy:
                 {
-                    // Hard arctan clip plus a touch of upper-harmonic fizz (oversampled).
-                    float a = std::atan (driven * 1.8f) * (2.0f / juce::MathConstants<float>::pi);
-                    a += 0.06f * std::sin (driven * 3.0f);
-                    return juce::jlimit (-1.0f, 1.0f, a * 1.1f);
+                    // Hard-edged: tanh blended with a hard clip for biting odd
+                    // harmonics (band-limited by the oversampled core; no aliasy sin).
+                    const float soft = std::tanh (driven * 1.6f);
+                    const float hard = juce::jlimit (-1.0f, 1.0f, driven * 1.6f);
+                    return 0.82f * soft + 0.18f * hard;
                 }
 
                 case BrineType::numTypes:
@@ -151,7 +146,8 @@ namespace pp
 
         //==========================================================================
         BrineType type = BrineType::Kosher;
-        std::vector<DCBlocker> dcBlockers;
+        std::vector<dsp::DCBlocker> dcBlockers;
+        dsp::LevelMatcher levelMatcher;
 
         juce::SmoothedValue<float> driveSmoothed, mixSmoothed;
 

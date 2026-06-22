@@ -246,9 +246,14 @@ namespace pp
 
         dryBuffer.setSize (numChannels, samplesPerBlock, false, false, true);
 
-        setLatencySamples ((int) std::round (oversampler.getLatencySamples()
-                                             + limiter.getLatencySamples()
-                                             + (currentSpectralOn ? spectral.getLatencySamples() : 0.0f)));
+        reportedLatency = (int) std::round (oversampler.getLatencySamples()
+                                            + limiter.getLatencySamples()
+                                            + (currentSpectralOn ? spectral.getLatencySamples() : 0.0f));
+        setLatencySamples (reportedLatency);
+
+        bypassRing.assign ((size_t) numChannels,
+                           std::vector<float> ((size_t) juce::jmax (1, reportedLatency), 0.0f));
+        bypassWrite = 0;
 
         meterRms = meterPeak = meterGR = 0.0f;
     }
@@ -310,6 +315,24 @@ namespace pp
 
         if (pBypass->load() > 0.5f)
         {
+            // Delay the dry signal by the reported latency so bypass stays aligned.
+            if (reportedLatency > 0)
+            {
+                const auto chs = juce::jmin (buffer.getNumChannels(), (int) bypassRing.size());
+                for (int s = 0; s < numSamples; ++s)
+                {
+                    for (int ch = 0; ch < chs; ++ch)
+                    {
+                        auto& r = bypassRing[(size_t) ch];
+                        const float in = buffer.getSample (ch, s);
+                        buffer.setSample (ch, s, r[(size_t) bypassWrite]);
+                        r[(size_t) bypassWrite] = in;
+                    }
+                    if (++bypassWrite >= reportedLatency)
+                        bypassWrite = 0;
+                }
+            }
+
             mixJingle (buffer);
             updateMeters (buffer);
             pushAnalyzer (buffer);

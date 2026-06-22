@@ -114,7 +114,7 @@ int main()
     }
 
     //==========================================================================
-    std::cout << "\nFermentation aging (output should grow while driven):" << std::endl;
+    std::cout << "\nFermentation aging (loudness-stable; maturity grows):" << std::endl;
     {
         pp::FermentationEngine ferment;
         ferment.prepare (sr, channels);
@@ -133,10 +133,10 @@ int main()
             if (n == 99) lateMag  = buffer.getMagnitude (0, block);
         }
 
-        check (lateMag >= earlyMag * 0.99f,
-               "fermented signal does not collapse (early " + juce::String (earlyMag, 3)
+        check (lateMag > earlyMag * 0.5f && lateMag < earlyMag * 1.6f,
+               "fermented signal stays loudness-stable while aging (early " + juce::String (earlyMag, 3)
                    + " -> late " + juce::String (lateMag, 3) + ")");
-        check (ferment.getMaturityReadout() > 0.0f, "maturity readout advanced");
+        check (ferment.getMaturityReadout() > 0.0f, "maturity readout advanced (aging)");
     }
 
     //==========================================================================
@@ -324,6 +324,64 @@ int main()
         }
         check (finite, "driven spectral output is finite");
         check (maxPeak < 8.0f, "driven spectral stays bounded (peak " + juce::String (maxPeak, 2) + ")");
+    }
+
+    //==========================================================================
+    std::cout << "\nControl behaviour:" << std::endl;
+    {
+        const float inRms = 0.5f / std::sqrt (2.0f);   // sine, amp 0.5
+
+        auto brineRms = [&] (float amt)
+        {
+            pp::BrineSaturator b;
+            b.prepare (sr, channels);
+            b.setParameters (amt, pp::BrineType::Kosher);
+            juce::AudioBuffer<float> buf (channels, block);
+            float r = 0.0f;
+            for (int n = 0; n < 40; ++n)
+            {
+                fillSine (buf, sr, 220.0f, 0.5f);
+                juce::dsp::AudioBlock<float> blk (buf);
+                b.process (blk);
+                r = buf.getRMSLevel (0, 0, block);
+            }
+            return r;
+        };
+        const float rLow  = brineRms (0.2f);
+        const float rHigh = brineRms (0.9f);
+        check (rHigh > inRms * 0.5f && rHigh < inRms * 2.0f,
+               "Brine stays loudness-matched at 90% (in " + juce::String (inRms, 3)
+                   + " -> out " + juce::String (rHigh, 3) + ")");
+        check (rLow > inRms * 0.5f && rLow < inRms * 2.0f, "Brine loudness-matched at 20%");
+
+        // Crunch Attack +/- should change transient punch in the right direction.
+        auto crunchPeak = [&] (float attack)
+        {
+            pp::CrunchDesigner c;
+            c.prepare (sr, channels);
+            c.setParameters (attack, 0.0f);
+            juce::AudioBuffer<float> buf (channels, block);
+            float peak = 0.0f;
+            for (int n = 0; n < 80; ++n)
+            {
+                for (int s = 0; s < block; ++s)
+                {
+                    const double t = (double) (n * block + s) / sr;
+                    const float env = (float) std::exp (-std::fmod (t, 0.25) * 45.0);
+                    const float v = env * std::sin (juce::MathConstants<float>::twoPi * 120.0f * (float) t);
+                    for (int ch = 0; ch < channels; ++ch) buf.setSample (ch, s, v);
+                }
+                juce::dsp::AudioBlock<float> blk (buf);
+                c.process (blk);
+                if (n > 8) peak = juce::jmax (peak, buf.getMagnitude (0, block));
+            }
+            return peak;
+        };
+        const float peakPlus  = crunchPeak (1.0f);
+        const float peakMinus = crunchPeak (-1.0f);
+        check (peakPlus > peakMinus * 1.05f,
+               "Crunch Attack+ is punchier than Attack- (" + juce::String (peakPlus, 3)
+                   + " > " + juce::String (peakMinus, 3) + ")");
     }
 
     //==========================================================================
