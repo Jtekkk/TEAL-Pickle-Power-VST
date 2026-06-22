@@ -49,6 +49,16 @@ namespace pp
         inline constexpr const char* mix           = "mix";
         inline constexpr const char* output        = "output";
         inline constexpr const char* oversampling  = "oversampling";
+
+        // PRO
+        inline constexpr const char* stereoMode    = "stereoMode";
+        inline constexpr const char* autoGain      = "autoGain";
+        inline constexpr const char* multiband     = "multiband";
+        inline constexpr const char* mbLow         = "mbLow";
+        inline constexpr const char* mbMid         = "mbMid";
+        inline constexpr const char* mbHigh        = "mbHigh";
+        inline constexpr const char* mbFreqLow     = "mbFreqLow";
+        inline constexpr const char* mbFreqHigh    = "mbFreqHigh";
     }
 
     namespace name
@@ -68,6 +78,16 @@ namespace pp
         inline constexpr const char* mix           = "Mix";
         inline constexpr const char* output        = "Output";
         inline constexpr const char* oversampling  = "Oversampling";
+
+        // PRO
+        inline constexpr const char* stereoMode    = "Stereo Mode";
+        inline constexpr const char* autoGain      = "Auto Gain";
+        inline constexpr const char* multiband     = "Multiband";
+        inline constexpr const char* mbLow         = "MB Low";
+        inline constexpr const char* mbMid         = "MB Mid";
+        inline constexpr const char* mbHigh        = "MB High";
+        inline constexpr const char* mbFreqLow     = "MB Freq Low";
+        inline constexpr const char* mbFreqHigh    = "MB Freq High";
     }
 
     //==============================================================================
@@ -102,6 +122,21 @@ namespace pp
     inline juce::StringArray oversamplingChoices()
     {
         return { "Off", "2x", "4x", "8x" };
+    }
+
+    //==============================================================================
+    // PRO: how the nonlinear core treats stereo.
+    enum class StereoMode
+    {
+        Stereo = 0,   // process L / R
+        MidSide,      // process Mid / Side
+
+        numModes
+    };
+
+    inline juce::StringArray stereoModeChoices()
+    {
+        return { "Stereo", "Mid / Side" };
     }
 
     //==============================================================================

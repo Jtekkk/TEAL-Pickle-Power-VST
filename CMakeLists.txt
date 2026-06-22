@@ -66,6 +66,7 @@ target_sources(PicklePower PRIVATE
     Source/DSP/SnapExciter.h
     Source/DSP/FermentationEngine.h
     Source/DSP/PickleJuice.h
+    Source/DSP/MultibandSaturator.h
     Source/DSP/TruePeakLimiter.h
     Source/GUI/NeonLookAndFeel.h
     Source/GUI/DancingPickleComponent.h

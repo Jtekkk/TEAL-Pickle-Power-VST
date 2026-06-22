@@ -44,6 +44,10 @@ namespace pp
         void setupCombo (juce::ComboBox&, juce::Label&, const juce::StringArray& items,
                          const juce::String& paramID, std::unique_ptr<APVTS::ComboBoxAttachment>&,
                          const juce::String& labelText);
+        void setupToggle (juce::ToggleButton&, juce::Label&, const juce::String& paramID,
+                          std::unique_ptr<APVTS::ButtonAttachment>&, const juce::String& labelText);
+        void setPage (bool pro);
+        void layoutGrid (juce::Rectangle<int> area, const std::vector<Knob*>& knobs, int cols, int rows);
 
         PicklePowerProcessor& processorRef;
         NeonLookAndFeel lookAndFeel;
@@ -65,6 +69,20 @@ namespace pp
         juce::ToggleButton bypassButton;
         std::unique_ptr<APVTS::ButtonAttachment> bypassAttachment;
 
+        // PRO page
+        juce::TextButton tabMain { "MAIN" }, tabPro { "PRO" };
+        bool showingPro = false;
+
+        juce::ComboBox stereoModeBox;
+        juce::Label    stereoModeLabel;
+        std::unique_ptr<APVTS::ComboBoxAttachment> stereoModeAttachment;
+
+        juce::ToggleButton autoGainButton, multibandButton;
+        juce::Label        autoGainLabel,  multibandLabel;
+        std::unique_ptr<APVTS::ButtonAttachment> autoGainAttachment, multibandAttachment;
+
+        Knob mbLow, mbMid, mbHigh, mbFreqLow, mbFreqHigh;
+
         juce::Rectangle<int> panelArea;
         bool lastNuclear = false;
 
@@ -73,6 +91,7 @@ namespace pp
         // audio path; useful for demos and screenshots.
         bool  demoMode  = false;
         float demoPhase = 0.0f;
+        bool  startOnProPage = false;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerEditor)
     };

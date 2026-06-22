@@ -57,21 +57,50 @@ namespace pp
         addAndMakeVisible (presetLabel);
 
         bypassButton.setClickingTogglesState (true);
+        bypassButton.getProperties().set ("invertOnState", true);   // on == bypassed == dim
         addAndMakeVisible (bypassButton);
         bypassAttachment = std::make_unique<APVTS::ButtonAttachment> (
             processorRef.getAPVTS(), id::bypass, bypassButton);
 
-        demoMode = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0") != "0";
+        // ---- PRO page controls ----
+        setupCombo (stereoModeBox, stereoModeLabel, stereoModeChoices(),
+                    id::stereoMode, stereoModeAttachment, "STEREO");
+        setupToggle (autoGainButton,  autoGainLabel,  id::autoGain,  autoGainAttachment,  "AUTO GAIN");
+        setupToggle (multibandButton, multibandLabel, id::multiband, multibandAttachment, "MULTIBAND");
+        setupKnob (mbLow,      id::mbLow,      "MB LOW");
+        setupKnob (mbMid,      id::mbMid,      "MB MID");
+        setupKnob (mbHigh,     id::mbHigh,     "MB HIGH");
+        setupKnob (mbFreqLow,  id::mbFreqLow,  "X-LOW");
+        setupKnob (mbFreqHigh, id::mbFreqHigh, "X-HIGH");
+
+        // ---- MAIN / PRO tabs ----
+        for (auto* t : { &tabMain, &tabPro })
+        {
+            t->setClickingTogglesState (true);
+            t->setRadioGroupId (100);
+            t->setColour (juce::TextButton::buttonColourId,   theme::panel);
+            t->setColour (juce::TextButton::buttonOnColourId, theme::neonGreen.withAlpha (0.30f));
+            t->setColour (juce::TextButton::textColourOffId,  theme::textDim);
+            t->setColour (juce::TextButton::textColourOnId,   theme::textBright);
+            addAndMakeVisible (*t);
+        }
+        tabMain.onClick = [this] { setPage (false); };
+        tabPro .onClick = [this] { setPage (true); };
+
+        const auto demoVal = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0");
+        demoMode = demoVal != "0";
         if (demoMode)
         {
             const int demoPreset = 2;   // "Punchy Snare" — shows off the new controls
             processorRef.getPresetManager().apply (demoPreset);
             presetBox.setSelectedItemIndex (demoPreset, juce::dontSendNotification);
+            startOnProPage = (demoVal == "2");   // PP_PICKLE_DEMO=2 opens the PRO page
         }
 
         setSize (meta::editorWidth, meta::editorHeight);
         setResizable (false, false);
 
+        setPage (startOnProPage);
         startTimerHz (60);
     }
 
@@ -119,6 +148,63 @@ namespace pp
             processorRef.getAPVTS(), paramID, box);
     }
 
+    void PicklePowerEditor::setupToggle (juce::ToggleButton& b, juce::Label& l,
+                                         const juce::String& paramID,
+                                         std::unique_ptr<APVTS::ButtonAttachment>& attachment,
+                                         const juce::String& labelText)
+    {
+        b.setClickingTogglesState (true);
+        addAndMakeVisible (b);
+
+        l.setText (labelText, juce::dontSendNotification);
+        l.setJustificationType (juce::Justification::centred);
+        l.setColour (juce::Label::textColourId, theme::neonLime);
+        l.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
+        addAndMakeVisible (l);
+
+        attachment = std::make_unique<APVTS::ButtonAttachment> (
+            processorRef.getAPVTS(), paramID, b);
+    }
+
+    void PicklePowerEditor::setPage (bool pro)
+    {
+        showingPro = pro;
+        const bool m = ! pro;
+
+        const std::array<Knob*, 12> mainKnobs {
+            &brine, &crunchAtk, &crunchSus, &snapLow, &snapMid, &snapHigh,
+            &ferment, &age, &juice, &width, &mix, &output
+        };
+        for (auto* k : mainKnobs) { k->slider.setVisible (m); k->label.setVisible (m); }
+        brineTypeBox.setVisible (m);    brineTypeLabel.setVisible (m);
+        oversamplingBox.setVisible (m); oversamplingLabel.setVisible (m);
+
+        const std::array<Knob*, 5> proKnobs { &mbLow, &mbMid, &mbHigh, &mbFreqLow, &mbFreqHigh };
+        for (auto* k : proKnobs) { k->slider.setVisible (pro); k->label.setVisible (pro); }
+        stereoModeBox.setVisible (pro);   stereoModeLabel.setVisible (pro);
+        autoGainButton.setVisible (pro);  autoGainLabel.setVisible (pro);
+        multibandButton.setVisible (pro); multibandLabel.setVisible (pro);
+
+        tabMain.setToggleState (m,   juce::dontSendNotification);
+        tabPro .setToggleState (pro, juce::dontSendNotification);
+        repaint();
+    }
+
+    void PicklePowerEditor::layoutGrid (juce::Rectangle<int> area, const std::vector<Knob*>& knobs,
+                                        int cols, int rows)
+    {
+        const int cw = area.getWidth()  / cols;
+        const int chh = area.getHeight() / rows;
+
+        for (int i = 0; i < (int) knobs.size(); ++i)
+        {
+            const int r = i / cols, c = i % cols;
+            auto cell = juce::Rectangle<int> (area.getX() + c * cw, area.getY() + r * chh, cw, chh).reduced (4);
+            knobs[(size_t) i]->label.setBounds (cell.removeFromTop (16));
+            knobs[(size_t) i]->slider.setBounds (cell);
+        }
+    }
+
     //==============================================================================
     void PicklePowerEditor::paint (juce::Graphics& g)
     {
@@ -138,19 +224,14 @@ namespace pp
         // Title.
         const bool nuclear = processorRef.isNuclear();
         g.setColour (nuclear ? theme::nuclear : theme::neonGreen);
-        g.setFont (NeonLookAndFeel::pickleFont (28.0f, true));
-        g.drawText ("PICKLE POWER", 18, 8, 460, 30, juce::Justification::centredLeft);
+        g.setFont (NeonLookAndFeel::pickleFont (26.0f, true));
+        g.drawText ("PICKLE POWER", 18, 8, 330, 28, juce::Justification::centredLeft);
 
         g.setColour (theme::textDim);
-        g.setFont (NeonLookAndFeel::pickleFont (11.5f, true));
-        g.drawText (nuclear ? "* * *  NUCLEAR PICKLE MODE  * * *"
-                            : "BRINE  -  CRUNCH  -  SNAP  -  FERMENT",
-                    20, 36, 460, 14, juce::Justification::centredLeft);
-
-        g.setColour (theme::textDim);
-        g.setFont (NeonLookAndFeel::pickleFont (10.0f));
-        g.drawText ("v" + juce::String (meta::version), getWidth() - 80, 12, 64, 14,
-                    juce::Justification::centredRight);
+        g.setFont (NeonLookAndFeel::pickleFont (11.0f, true));
+        g.drawText (nuclear ? "* * *  NUCLEAR PICKLE MODE  * * *  v" + juce::String (meta::version)
+                            : "BRINE - CRUNCH - SNAP - FERMENT   v" + juce::String (meta::version),
+                    20, 35, 340, 14, juce::Justification::centredLeft);
     }
 
     void PicklePowerEditor::resized()
@@ -159,9 +240,12 @@ namespace pp
 
         auto header = area.removeFromTop (52);
         bypassButton.setBounds (header.removeFromRight (54).reduced (10));
-        auto presetArea = header.removeFromRight (210).reduced (4, 12);
-        presetLabel.setBounds (presetArea.removeFromLeft (52));
+        auto presetArea = header.removeFromRight (200).reduced (4, 12);
+        presetLabel.setBounds (presetArea.removeFromLeft (46));
         presetBox.setBounds (presetArea);
+        auto tabArea = header.removeFromRight (124).reduced (8, 13);
+        tabMain.setBounds (tabArea.removeFromLeft (tabArea.getWidth() / 2).reduced (2, 0));
+        tabPro .setBounds (tabArea.reduced (2, 0));
 
         auto content = area.reduced (16, 8);
 
@@ -174,38 +258,42 @@ namespace pp
         meter.setBounds (content.removeFromLeft (34));
         content.removeFromLeft (16);
 
-        // Right: control panel.
+        // Right: control panel (MAIN and PRO pages share the area; visibility toggles).
         panelArea = content;
-        auto right = content.reduced (12);
+        const auto right = content.reduced (12);
 
-        auto combos = right.removeFromTop (52);
-        auto comboL = combos.removeFromLeft (combos.getWidth() / 2).reduced (6, 2);
-        brineTypeLabel.setBounds (comboL.removeFromTop (16));
-        brineTypeBox.setBounds (comboL.removeFromTop (28));
-        auto comboR = combos.reduced (6, 2);
-        oversamplingLabel.setBounds (comboR.removeFromTop (16));
-        oversamplingBox.setBounds (comboR.removeFromTop (28));
-
-        right.removeFromTop (8);
-
-        const std::array<Knob*, 12> knobs {
-            &brine,   &crunchAtk, &crunchSus,
-            &snapLow, &snapMid,   &snapHigh,
-            &ferment, &age,       &juice,
-            &width,   &mix,       &output
-        };
-
-        const int cols = 3, rows = 4;
-        const int cw = right.getWidth()  / cols;
-        const int chh = right.getHeight() / rows;
-
-        for (int i = 0; i < (int) knobs.size(); ++i)
+        // ---- MAIN page ----
         {
-            const int r = i / cols, c = i % cols;
-            auto cell = juce::Rectangle<int> (right.getX() + c * cw,
-                                              right.getY() + r * chh, cw, chh).reduced (4);
-            knobs[(size_t) i]->label.setBounds (cell.removeFromTop (16));
-            knobs[(size_t) i]->slider.setBounds (cell);
+            auto r = right;
+            auto combos = r.removeFromTop (52);
+            auto comboL = combos.removeFromLeft (combos.getWidth() / 2).reduced (6, 2);
+            brineTypeLabel.setBounds (comboL.removeFromTop (16));
+            brineTypeBox.setBounds (comboL.removeFromTop (28));
+            auto comboR = combos.reduced (6, 2);
+            oversamplingLabel.setBounds (comboR.removeFromTop (16));
+            oversamplingBox.setBounds (comboR.removeFromTop (28));
+
+            r.removeFromTop (8);
+            layoutGrid (r, { &brine, &crunchAtk, &crunchSus, &snapLow, &snapMid, &snapHigh,
+                             &ferment, &age, &juice, &width, &mix, &output }, 3, 4);
+        }
+
+        // ---- PRO page ----
+        {
+            auto r = right;
+            auto top = r.removeFromTop (66);
+            auto c1 = top.removeFromLeft (top.getWidth() / 3).reduced (6, 2);
+            stereoModeLabel.setBounds (c1.removeFromTop (16));
+            stereoModeBox.setBounds (c1.removeFromTop (28));
+            auto c2 = top.removeFromLeft (top.getWidth() / 2).reduced (6, 2);
+            autoGainLabel.setBounds (c2.removeFromTop (16));
+            autoGainButton.setBounds (c2.removeFromTop (32).withSizeKeepingCentre (46, 28));
+            auto c3 = top.reduced (6, 2);
+            multibandLabel.setBounds (c3.removeFromTop (16));
+            multibandButton.setBounds (c3.removeFromTop (32).withSizeKeepingCentre (46, 28));
+
+            r.removeFromTop (8);
+            layoutGrid (r, { &mbLow, &mbMid, &mbHigh, &mbFreqLow, &mbFreqHigh }, 3, 2);
         }
     }
 

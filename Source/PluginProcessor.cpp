@@ -34,6 +34,15 @@ namespace pp
         pMix          = apvts.getRawParameterValue (id::mix);
         pOutput       = apvts.getRawParameterValue (id::output);
         pOversampling = apvts.getRawParameterValue (id::oversampling);
+
+        pStereoMode   = apvts.getRawParameterValue (id::stereoMode);
+        pAutoGain     = apvts.getRawParameterValue (id::autoGain);
+        pMultiband    = apvts.getRawParameterValue (id::multiband);
+        pMbLow        = apvts.getRawParameterValue (id::mbLow);
+        pMbMid        = apvts.getRawParameterValue (id::mbMid);
+        pMbHigh       = apvts.getRawParameterValue (id::mbHigh);
+        pMbFreqLow    = apvts.getRawParameterValue (id::mbFreqLow);
+        pMbFreqHigh   = apvts.getRawParameterValue (id::mbFreqHigh);
     }
 
     //==============================================================================
@@ -103,6 +112,38 @@ namespace pp
         layout.add (std::make_unique<AudioParameterChoice> (
             ParameterID { id::oversampling, 1 }, name::oversampling, oversamplingChoices(), 1));
 
+        //---- PRO -------------------------------------------------------------
+        layout.add (std::make_unique<AudioParameterChoice> (
+            ParameterID { id::stereoMode, 1 }, name::stereoMode, stereoModeChoices(), 0));
+
+        layout.add (std::make_unique<AudioParameterBool> (
+            ParameterID { id::autoGain, 1 }, name::autoGain, false));
+
+        layout.add (std::make_unique<AudioParameterBool> (
+            ParameterID { id::multiband, 1 }, name::multiband, false));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::mbLow, 1 }, name::mbLow,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::mbMid, 1 }, name::mbMid,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::mbHigh, 1 }, name::mbHigh,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::mbFreqLow, 1 }, name::mbFreqLow,
+            NormalisableRange<float> (40.0f, 1000.0f, 1.0f, 0.3f), 200.0f,
+            AudioParameterFloatAttributes().withLabel (" Hz")));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::mbFreqHigh, 1 }, name::mbFreqHigh,
+            NormalisableRange<float> (1000.0f, 12000.0f, 1.0f, 0.4f), 2500.0f,
+            AudioParameterFloatAttributes().withLabel (" Hz")));
+
         return layout;
     }
 
@@ -124,13 +165,17 @@ namespace pp
         const int   factor = oversampler.getFactor();
         const double osRate = sampleRate * factor;
 
+        const int osBlock = samplesPerBlock * factor;
+
         brineSat     .prepare (osRate, numChannels);
         crunchDesigner.prepare (osRate, numChannels);
         snapExciter  .prepare (osRate, numChannels);
         fermentation .prepare (osRate, numChannels);
         pickleJuice  .prepare (osRate, numChannels);
+        multiband    .prepare (osRate, numChannels, osBlock);
 
         limiter.prepare (sampleRate, numChannels);
+        autoGainGain = 1.0f;
 
         widthSmoothed .reset (sampleRate, 0.02);
         mixSmoothed   .reset (sampleRate, 0.02);
@@ -205,12 +250,23 @@ namespace pp
                                    pSnapHigh->load() * 0.01f);
         fermentation.setParameters (pFermentation->load() * 0.01f, pAge->load());
         pickleJuice.setParameters (pPickleJuice->load() * 0.01f);
+        multiband.setParameters (pMbLow->load()  * 0.01f, pMbMid->load() * 0.01f,
+                                 pMbHigh->load() * 0.01f, pMbFreqLow->load(), pMbFreqHigh->load());
 
         widthSmoothed .setTargetValue (pWidth->load()  * 0.01f);
         mixSmoothed   .setTargetValue (pMix->load()    * 0.01f);
         outputSmoothed.setTargetValue (pOutput->load());
 
-        // ---- nonlinear core (oversampled) ------------------------------------
+        // PRO options.
+        const bool msMode = numCh >= 2
+                         && (StereoMode) (int) std::round (pStereoMode->load()) == StereoMode::MidSide;
+        const bool mbOn   = pMultiband->load() > 0.5f;
+        const bool agOn   = pAutoGain->load()  > 0.5f;
+
+        // ---- nonlinear core (oversampled, optionally Mid/Side) ----------------
+        if (msMode)
+            encodeMidSide (buffer);
+
         juce::dsp::AudioBlock<float> block (buffer);
         auto osBlock = oversampler.processUp (block);
 
@@ -219,12 +275,17 @@ namespace pp
         snapExciter   .process (osBlock);
         fermentation  .process (osBlock);
         pickleJuice   .process (osBlock);
+        if (mbOn)
+            multiband .process (osBlock);
 
         oversampler.processDown (block);
 
+        if (msMode)
+            decodeMidSide (buffer);
+
         // ---- host-rate stages ------------------------------------------------
         applyWidth (buffer);
-        applyMixAndGain (buffer);
+        applyMixAndGain (buffer, agOn);
 
         limiter.process (block);
 
@@ -253,21 +314,70 @@ namespace pp
         }
     }
 
-    void PicklePowerProcessor::applyMixAndGain (juce::AudioBuffer<float>& buffer)
+    void PicklePowerProcessor::applyMixAndGain (juce::AudioBuffer<float>& buffer, bool autoGainOn)
     {
         const auto numCh = buffer.getNumChannels();
+        const auto numSamples = buffer.getNumSamples();
 
-        for (int s = 0; s < buffer.getNumSamples(); ++s)
+        // Pass 1: dry/wet mix, measuring input vs processed loudness for auto-gain.
+        double drySumSq = 0.0, wetSumSq = 0.0;
+
+        for (int s = 0; s < numSamples; ++s)
         {
-            const float mix  = mixSmoothed.getNextValue();
-            const float gain = juce::Decibels::decibelsToGain (outputSmoothed.getNextValue());
+            const float mix = mixSmoothed.getNextValue();
 
             for (int ch = 0; ch < numCh; ++ch)
             {
                 auto* d = buffer.getWritePointer (ch);
                 const float dry = dryBuffer.getSample (ch, s);
-                d[s] = (dry + mix * (d[s] - dry)) * gain;
+                const float wet = dry + mix * (d[s] - dry);
+                d[s] = wet;
+                drySumSq += (double) dry * dry;
+                wetSumSq += (double) wet * wet;
             }
+        }
+
+        // Auto-gain: drift the compensation toward matching input loudness (±18 dB).
+        float target = 1.0f;
+        if (autoGainOn && wetSumSq > 1.0e-9)
+            target = juce::jlimit (0.125f, 8.0f,
+                                   (float) std::sqrt (drySumSq / juce::jmax (1.0e-12, wetSumSq)));
+        autoGainGain += (target - autoGainGain) * 0.08f;
+
+        // Pass 2: output trim (+ auto-gain).
+        for (int s = 0; s < numSamples; ++s)
+        {
+            const float gain = juce::Decibels::decibelsToGain (outputSmoothed.getNextValue()) * autoGainGain;
+            for (int ch = 0; ch < numCh; ++ch)
+                buffer.getWritePointer (ch)[s] *= gain;
+        }
+    }
+
+    void PicklePowerProcessor::encodeMidSide (juce::AudioBuffer<float>& buffer)
+    {
+        if (buffer.getNumChannels() < 2) return;
+        auto* L = buffer.getWritePointer (0);
+        auto* R = buffer.getWritePointer (1);
+        for (int s = 0; s < buffer.getNumSamples(); ++s)
+        {
+            const float m = (L[s] + R[s]) * 0.5f;
+            const float side = (L[s] - R[s]) * 0.5f;
+            L[s] = m;       // channel 0 = Mid
+            R[s] = side;    // channel 1 = Side
+        }
+    }
+
+    void PicklePowerProcessor::decodeMidSide (juce::AudioBuffer<float>& buffer)
+    {
+        if (buffer.getNumChannels() < 2) return;
+        auto* M = buffer.getWritePointer (0);
+        auto* S = buffer.getWritePointer (1);
+        for (int s = 0; s < buffer.getNumSamples(); ++s)
+        {
+            const float l = M[s] + S[s];
+            const float r = M[s] - S[s];
+            M[s] = l;
+            S[s] = r;
         }
     }
 

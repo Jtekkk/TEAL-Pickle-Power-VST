@@ -129,10 +129,13 @@ namespace pp
                                bool shouldDrawButtonAsHighlighted, bool) override
         {
             auto bounds = button.getLocalBounds().toFloat().reduced (2.0f);
-            const auto on = button.getToggleState();
 
-            // For a bypass button "on" usually means bypassed -> dim.
-            const auto accent = on ? theme::textDim : theme::neonGreen;
+            // "lit" = the control is engaged. Bypass inverts (on == bypassed == dim);
+            // set the "invertOnState" property on such buttons.
+            const bool on = button.getToggleState();
+            const bool invert = (bool) button.getProperties().getWithDefault ("invertOnState", false);
+            const bool lit = invert ? ! on : on;
+            const auto accent = lit ? theme::neonGreen : theme::textDim;
 
             g.setColour (theme::panel);
             g.fillRoundedRectangle (bounds, 6.0f);

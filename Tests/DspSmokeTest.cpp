@@ -20,6 +20,7 @@
 #include "../Source/DSP/SnapExciter.h"
 #include "../Source/DSP/FermentationEngine.h"
 #include "../Source/DSP/PickleJuice.h"
+#include "../Source/DSP/MultibandSaturator.h"
 #include "../Source/DSP/TruePeakLimiter.h"
 
 namespace
@@ -209,6 +210,43 @@ int main()
         check ((int) up.getNumSamples() == block * 4, "upsampled block is 4x longer");
         check (allFinite (buffer), "oversampled round-trip is finite");
         check (os.getLatencySamples() > 0.0f, "oversampler reports latency");
+    }
+
+    //==========================================================================
+    std::cout << "\nMultiband saturator (Pro):" << std::endl;
+    {
+        pp::MultibandSaturator mb;
+        mb.prepare (sr, channels, block);
+        juce::AudioBuffer<float> buffer (channels, block);
+
+        // Undriven: crossovers should reconstruct with flat magnitude (RMS preserved).
+        mb.setParameters (0.0f, 0.0f, 0.0f, 200.0f, 2500.0f);
+        float inRms = 0.0f, outRms = 0.0f;
+        for (int n = 0; n < 12; ++n)
+        {
+            fillSine (buffer, sr, 600.0f, 0.5f);
+            inRms = buffer.getRMSLevel (0, 0, block);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            mb.process (blk);
+            outRms = buffer.getRMSLevel (0, 0, block);
+        }
+        check (std::abs (outRms - inRms) < inRms * 0.1f,
+               "undriven bands reconstruct (RMS " + juce::String (inRms, 3)
+                   + " -> " + juce::String (outRms, 3) + ")");
+
+        // Driven hard on all bands.
+        mb.setParameters (0.9f, 0.9f, 0.9f, 150.0f, 3000.0f);
+        bool finite = true; float maxPeak = 0.0f;
+        for (int n = 0; n < 40; ++n)
+        {
+            fillSine (buffer, sr, 600.0f, 0.7f);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            mb.process (blk);
+            finite = finite && allFinite (buffer);
+            maxPeak = juce::jmax (maxPeak, buffer.getMagnitude (0, block));
+        }
+        check (finite, "driven multiband output is finite");
+        check (maxPeak < 10.0f, "driven multiband stays bounded (peak " + juce::String (maxPeak, 2) + ")");
     }
 
     //==========================================================================

@@ -27,6 +27,7 @@
 #include "DSP/SnapExciter.h"
 #include "DSP/FermentationEngine.h"
 #include "DSP/PickleJuice.h"
+#include "DSP/MultibandSaturator.h"
 #include "DSP/TruePeakLimiter.h"
 
 namespace pp
@@ -82,9 +83,12 @@ namespace pp
         void handleAsyncUpdate() override;   // rebuilds oversampling off the audio thread
 
         void applyWidth      (juce::AudioBuffer<float>&);
-        void applyMixAndGain (juce::AudioBuffer<float>&);
+        void applyMixAndGain (juce::AudioBuffer<float>&, bool autoGainOn);
         void updateMeters    (const juce::AudioBuffer<float>&);
         void updateNuclearState();
+
+        static void encodeMidSide (juce::AudioBuffer<float>&);
+        static void decodeMidSide (juce::AudioBuffer<float>&);
 
         //==========================================================================
         juce::AudioProcessorValueTreeState apvts;
@@ -96,6 +100,7 @@ namespace pp
         SnapExciter        snapExciter;
         FermentationEngine fermentation;
         PickleJuice        pickleJuice;
+        MultibandSaturator multiband;
         TruePeakLimiter    limiter;
 
         juce::AudioBuffer<float> dryBuffer;
@@ -105,6 +110,8 @@ namespace pp
         int    hostBlock      = 0;
         int    numChannels    = 2;
         OversampleChoice currentOversampleChoice = OversampleChoice::Off;
+
+        float  autoGainGain = 1.0f;   // smoothed auto-gain compensation
 
         std::atomic<float> meterRms  { 0.0f };
         std::atomic<float> meterPeak { 0.0f };
@@ -127,6 +134,16 @@ namespace pp
         std::atomic<float>* pMix          = nullptr;
         std::atomic<float>* pOutput       = nullptr;
         std::atomic<float>* pOversampling = nullptr;
+
+        // PRO
+        std::atomic<float>* pStereoMode   = nullptr;
+        std::atomic<float>* pAutoGain     = nullptr;
+        std::atomic<float>* pMultiband    = nullptr;
+        std::atomic<float>* pMbLow        = nullptr;
+        std::atomic<float>* pMbMid        = nullptr;
+        std::atomic<float>* pMbHigh       = nullptr;
+        std::atomic<float>* pMbFreqLow    = nullptr;
+        std::atomic<float>* pMbFreqHigh   = nullptr;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerProcessor)
     };
