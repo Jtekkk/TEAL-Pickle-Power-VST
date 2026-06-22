@@ -23,7 +23,7 @@ namespace pp
     // Plugin meta
     namespace meta
     {
-        inline constexpr const char* pluginName   = "Pickle Power";
+        inline constexpr const char* pluginName   = "TEAL-Pickle-Power-VST";
         inline constexpr const char* version      = "1.0.0";
         inline constexpr int         editorWidth  = 760;
         inline constexpr int         editorHeight = 700;

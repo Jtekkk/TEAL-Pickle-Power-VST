@@ -14,7 +14,7 @@
 set -euo pipefail
 
 VERSION="1.0.0"
-IDENTIFIER="com.pickleaudio.picklepower"
+IDENTIFIER="com.tekkengineeringaudiolabs.tealpicklepowervst"
 ART="build/PicklePower_artefacts/Release"
 
 if [ ! -d "$ART" ]; then
@@ -27,11 +27,11 @@ mkdir -p "$STAGE/Library/Audio/Plug-Ins/VST3" \
          "$STAGE/Library/Audio/Plug-Ins/Components" \
          "$STAGE/Applications"
 
-[ -d "$ART/VST3/Pickle Power.vst3" ]      && cp -R "$ART/VST3/Pickle Power.vst3"      "$STAGE/Library/Audio/Plug-Ins/VST3/"
-[ -d "$ART/AU/Pickle Power.component" ]    && cp -R "$ART/AU/Pickle Power.component"   "$STAGE/Library/Audio/Plug-Ins/Components/"
-[ -d "$ART/Standalone/Pickle Power.app" ] && cp -R "$ART/Standalone/Pickle Power.app" "$STAGE/Applications/"
+[ -d "$ART/VST3/TEAL-Pickle-Power-VST.vst3" ]      && cp -R "$ART/VST3/TEAL-Pickle-Power-VST.vst3"      "$STAGE/Library/Audio/Plug-Ins/VST3/"
+[ -d "$ART/AU/TEAL-Pickle-Power-VST.component" ]    && cp -R "$ART/AU/TEAL-Pickle-Power-VST.component"   "$STAGE/Library/Audio/Plug-Ins/Components/"
+[ -d "$ART/Standalone/TEAL-Pickle-Power-VST.app" ] && cp -R "$ART/Standalone/TEAL-Pickle-Power-VST.app" "$STAGE/Applications/"
 
-OUT="PicklePower-${VERSION}-macOS.pkg"
+OUT="TEAL-Pickle-Power-VST-${VERSION}-macOS.pkg"
 pkgbuild --root "$STAGE" \
          --identifier "$IDENTIFIER" \
          --version "$VERSION" \

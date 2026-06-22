@@ -8,9 +8,9 @@
 ;  Output lands in packaging\windows\Output\.
 ; ============================================================================
 
-#define MyAppName       "Pickle Power"
+#define MyAppName       "TEAL-Pickle-Power-VST"
 #define MyAppVersion    "1.0.0"
-#define MyPublisher     "Pickle Audio"
+#define MyPublisher     "Tekk Engineering Audio Labs"
 #define ArtefactsDir    "..\..\build\PicklePower_artefacts\Release"
 
 [Setup]
@@ -19,7 +19,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyPublisher}
 DefaultDirName={autopf}\{#MyPublisher}\{#MyAppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=PicklePower-{#MyAppVersion}-Windows
+OutputBaseFilename=TEAL-Pickle-Power-VST-{#MyAppVersion}-Windows
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
@@ -32,19 +32,19 @@ Name: "standalone"; Description: "Standalone app";     Types: full custom
 
 [Files]
 ; VST3 bundle -> the shared system VST3 folder.
-Source: "{#ArtefactsDir}\VST3\Pickle Power.vst3\*"; \
-    DestDir: "{commoncf64}\VST3\Pickle Power.vst3"; \
+Source: "{#ArtefactsDir}\VST3\TEAL-Pickle-Power-VST.vst3\*"; \
+    DestDir: "{commoncf64}\VST3\TEAL-Pickle-Power-VST.vst3"; \
     Components: vst3; Flags: recursesubdirs createallsubdirs ignoreversion
 
 ; Standalone app.
-Source: "{#ArtefactsDir}\Standalone\Pickle Power.exe"; \
+Source: "{#ArtefactsDir}\Standalone\TEAL-Pickle-Power-VST.exe"; \
     DestDir: "{app}"; Components: standalone; Flags: ignoreversion
 
 ; Jingle: extracted to a temp folder and played while the installer runs.
 Source: "..\..\assets\audio\TEAL_pickle_power.mp3"; Flags: dontcopy
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\Pickle Power.exe"; Components: standalone
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\TEAL-Pickle-Power-VST.exe"; Components: standalone
 
 [Code]
 function mciSendString(lpstrCommand, lpstrReturnString: string;

@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          vst3="build/PicklePower_artefacts/Release/VST3/Pickle Power.vst3"
+          vst3="build/PicklePower_artefacts/Release/VST3/TEAL-Pickle-Power-VST.vst3"
           args="--strictness-level 10 --repeat 3 --randomise --timeout-ms 600000 --validate"
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a "$PLUGINVAL" $args "$vst3"
@@ -99,9 +99,9 @@ jobs:
         run: |
           cd build/PicklePower_artefacts/Release
           if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "../../../PicklePower-${{ runner.os }}.zip" ./*
+            7z a "../../../TEAL-Pickle-Power-VST-${{ runner.os }}.zip" ./*
           else
-            tar -czf "../../../PicklePower-${{ runner.os }}.tar.gz" ./*
+            tar -czf "../../../TEAL-Pickle-Power-VST-${{ runner.os }}.tar.gz" ./*
           fi
 
       - name: Upload package
@@ -109,8 +109,8 @@ jobs:
         with:
           name: PicklePower-${{ runner.os }}-package
           path: |
-            PicklePower-${{ runner.os }}.zip
-            PicklePower-${{ runner.os }}.tar.gz
+            TEAL-Pickle-Power-VST-${{ runner.os }}.zip
+            TEAL-Pickle-Power-VST-${{ runner.os }}.tar.gz
           if-no-files-found: ignore
 
       - name: Build Windows installer (Inno Setup)
@@ -174,10 +174,10 @@ jobs:
       - name: Collect release files
         run: |
           mkdir -p release
-          # Only the named installers / packages (all start with "PicklePower"),
-          # not the bare standalone "Pickle Power.exe" build output.
-          find artifacts -type f -name 'PicklePower*' \
-            \( -name '*.exe' -o -name '*.pkg' -o -name '*.zip' -o -name '*.tar.gz' \) \
+          # Only the packaged downloads (zip/tar) and native installers (.exe/.pkg),
+          # i.e. files from the *-package / *-installer artifacts — not the raw build
+          # output (which includes the bare standalone TEAL-Pickle-Power-VST.exe).
+          find artifacts -type f \( -path '*-package/*' -o -path '*-installer/*' \) \
             -exec cp {} release/ \;
           echo "Release files:"; ls -la release
 

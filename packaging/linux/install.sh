@@ -13,7 +13,7 @@
 set -euo pipefail
 
 ART="build/PicklePower_artefacts/Release"
-SRC="$ART/VST3/Pickle Power.vst3"
+SRC="$ART/VST3/TEAL-Pickle-Power-VST.vst3"
 DEST="${HOME}/.vst3"
 
 if [ ! -d "$SRC" ]; then
@@ -22,6 +22,6 @@ if [ ! -d "$SRC" ]; then
 fi
 
 mkdir -p "$DEST"
-rm -rf "$DEST/Pickle Power.vst3"
+rm -rf "$DEST/TEAL-Pickle-Power-VST.vst3"
 cp -R "$SRC" "$DEST/"
-echo "Installed: $DEST/Pickle Power.vst3"
+echo "Installed: $DEST/TEAL-Pickle-Power-VST.vst3"

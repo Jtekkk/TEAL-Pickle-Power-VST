@@ -37,12 +37,12 @@ endif()
 # The plugin target
 #------------------------------------------------------------------------------
 juce_add_plugin(PicklePower
-    COMPANY_NAME                "Pickle Audio"
-    BUNDLE_ID                   "com.pickleaudio.picklepower"
-    PLUGIN_MANUFACTURER_CODE    Pkau
+    COMPANY_NAME                "Tekk Engineering Audio Labs"
+    BUNDLE_ID                   "com.tekkengineeringaudiolabs.tealpicklepowervst"
+    PLUGIN_MANUFACTURER_CODE    Teal
     PLUGIN_CODE                 Pkpw
     FORMATS                     VST3 AU Standalone
-    PRODUCT_NAME                "Pickle Power"
+    PRODUCT_NAME                "TEAL-Pickle-Power-VST"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE

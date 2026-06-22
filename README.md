@@ -4,6 +4,8 @@ A characterful **saturation · fermentation · dynamics** effect plugin built wi
 **JUCE 8** (C++20). Brine it, crunch it, snap it, ferment it — and watch the
 neon pickle dance to your audio.
 
+By **Tekk Engineering Audio Labs** — installs as `TEAL-Pickle-Power-VST` (VST3 / AU / Standalone).
+
 ![Build](https://github.com/Jtekkk/TEAL-Pickle-Power-VST/actions/workflows/build.yml/badge.svg)
 &nbsp;**VST3 · AU · Standalone** &nbsp;·&nbsp; Windows / macOS / Linux &nbsp;·&nbsp; validated with **pluginval** (strictness 10)
 
@@ -24,9 +26,9 @@ Grab the latest installer for your platform from the
 
 | Platform | File | Installs |
 |----------|------|----------|
-| Windows  | `PicklePower-1.0.0-Windows.exe` | VST3 + Standalone |
-| macOS    | `PicklePower-1.0.0-macOS.pkg`   | VST3 + AU + Standalone |
-| Linux    | `PicklePower-Linux.tar.gz`      | VST3 + Standalone (see `packaging/linux/install.sh`) |
+| Windows  | `TEAL-Pickle-Power-VST-1.0.0-Windows.exe` | VST3 + Standalone |
+| macOS    | `TEAL-Pickle-Power-VST-1.0.0-macOS.pkg`   | VST3 + AU + Standalone |
+| Linux    | `TEAL-Pickle-Power-VST-Linux.tar.gz`      | VST3 + Standalone (see `packaging/linux/install.sh`) |
 
 Then rescan plugins in your DAW. (macOS builds are unsigned — right-click → Open
 the first time, or clear the quarantine flag.)

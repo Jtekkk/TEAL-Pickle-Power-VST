@@ -65,8 +65,8 @@ namespace pp
         juce::File getUserDir() const
         {
             auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                           .getChildFile ("Pickle Audio")
-                           .getChildFile ("Pickle Power")
+                           .getChildFile ("Tekk Engineering Audio Labs")
+                           .getChildFile ("TEAL-Pickle-Power-VST")
                            .getChildFile ("Presets");
             dir.createDirectory();
             return dir;
