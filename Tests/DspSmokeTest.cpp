@@ -474,6 +474,34 @@ int main()
     }
 
     //==========================================================================
+    std::cout << "\nK-weighting (LUFS-style auto-gain loudness):" << std::endl;
+    {
+        auto kRms = [&] (float freq)
+        {
+            pp::dsp::KWeighting k;
+            k.prepare (sr, 1);
+            float r = 0.0f;
+            for (int n = 0; n < 80; ++n)
+            {
+                juce::AudioBuffer<float> buf (1, block);
+                for (int s = 0; s < block; ++s)
+                {
+                    const float ph = juce::MathConstants<float>::twoPi * freq * (float) (n * block + s) / (float) sr;
+                    buf.setSample (0, s, k.process (0, 0.5f * std::sin (ph)));
+                }
+                r = buf.getRMSLevel (0, 0, block);
+            }
+            return r;
+        };
+        const float lo = kRms (40.0f), mid = kRms (1000.0f), hi = kRms (6000.0f);
+        check (std::isfinite (lo) && std::isfinite (mid) && std::isfinite (hi), "K-weighting is finite");
+        check (lo < mid * 0.7f, "K-weighting de-emphasises 40 Hz vs 1 kHz ("
+                                + juce::String (lo, 3) + " < " + juce::String (mid, 3) + ")");
+        check (hi > mid * 1.05f, "K-weighting lifts 6 kHz (head shelf) vs 1 kHz ("
+                                 + juce::String (hi, 3) + " > " + juce::String (mid, 3) + ")");
+    }
+
+    //==========================================================================
     std::cout << "\nADAA anti-aliasing (Brine Spicy, base rate):" << std::endl;
     {
         constexpr int order = 13, N = 1 << order;          // 8192-pt FFT

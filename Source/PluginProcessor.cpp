@@ -237,6 +237,8 @@ namespace pp
 
         limiter.prepare (sampleRate, numChannels);
         autoGainGain = 1.0f;
+        dryLoudness.prepare (sampleRate, numChannels);
+        wetLoudness.prepare (sampleRate, numChannels);
         currentSpectralOn = pSpectralOn->load() > 0.5f;
         prepareJingle (sampleRate);
 
@@ -452,8 +454,14 @@ namespace pp
                 const float dry = dryBuffer.getSample (ch, s);
                 const float wet = dry + mix * (d[s] - dry);
                 d[s] = wet;
-                drySumSq += (double) dry * dry;
-                wetSumSq += (double) wet * wet;
+
+                if (autoGainOn)   // K-weighted (LUFS-style) loudness for the match
+                {
+                    const float kd = dryLoudness.process (ch, dry);
+                    const float kw = wetLoudness.process (ch, wet);
+                    drySumSq += (double) kd * kd;
+                    wetSumSq += (double) kw * kw;
+                }
             }
         }
 

@@ -21,6 +21,7 @@
 
 #include "Utils/Constants.h"
 #include "Utils/PresetManager.h"
+#include "DSP/DSPHelpers.h"
 #include "DSP/Oversampler.h"
 #include "DSP/BrineSaturator.h"
 #include "DSP/CrunchDesigner.h"
@@ -135,6 +136,7 @@ namespace pp
         int bypassWrite = 0;
 
         float  autoGainGain = 1.0f;   // smoothed auto-gain compensation
+        dsp::KWeighting dryLoudness, wetLoudness;   // K-weighted (LUFS-style) auto-gain detection
 
         // Dev/demo aid (PP_PICKLE_DEMO env): inject a test tone so the analyzer /
         // meters / pickle show real activity without an audio device. No effect

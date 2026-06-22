@@ -64,4 +64,65 @@ namespace pp::dsp
     private:
         float coeff = 0.0f, inSq = 0.0f, outSq = 0.0f;
     };
+
+    //==============================================================================
+    /** ITU-R BS.1770 K-weighting filter (per channel): a +4 dB head high-shelf
+        (~1.68 kHz) followed by an RLB high-pass (~38 Hz). Designed via RBJ at the
+        runtime sample rate (a faithful approximation of the spec curve — for an
+        internal loudness match that is all that's needed; perceptually-weighted
+        energy tracks the ear far better than flat RMS). */
+    struct KWeighting
+    {
+        void prepare (double sampleRate, int numChannels)
+        {
+            designShelf (sampleRate, 1681.97, 4.0);
+            designHighPass (sampleRate, 38.0, 0.5);
+            ch.assign ((size_t) juce::jmax (1, numChannels), ChState {});
+        }
+
+        void reset() { for (auto& c : ch) c = ChState {}; }
+
+        float process (int channel, float x) noexcept
+        {
+            auto& st = ch[(size_t) channel % ch.size()];
+            const float y1 = sb0 * x  + st.s1;  st.s1 = sb1 * x  - sa1 * y1 + st.s2;  st.s2 = sb2 * x  - sa2 * y1;
+            const float y2 = hb0 * y1 + st.h1;  st.h1 = hb1 * y1 - ha1 * y2 + st.h2;  st.h2 = hb2 * y1 - ha2 * y2;
+            return y2;
+        }
+
+    private:
+        struct ChState { float s1 = 0, s2 = 0, h1 = 0, h2 = 0; };
+
+        void designShelf (double fs, double fc, double dB)   // RBJ high-shelf, slope S = 1
+        {
+            const double A  = std::pow (10.0, dB / 40.0);
+            const double w0 = juce::MathConstants<double>::twoPi * fc / fs;
+            const double cw = std::cos (w0);
+            const double alpha = std::sin (w0) * 0.5 * std::sqrt ((A + 1.0 / A) * (1.0 / 1.0 - 1.0) + 2.0);
+            const double tsa = 2.0 * std::sqrt (A) * alpha;
+            const double a0 =        (A + 1.0) - (A - 1.0) * cw + tsa;
+            sb0 = (float) ( A * ((A + 1.0) + (A - 1.0) * cw + tsa) / a0);
+            sb1 = (float) (-2.0 * A * ((A - 1.0) + (A + 1.0) * cw) / a0);
+            sb2 = (float) ( A * ((A + 1.0) + (A - 1.0) * cw - tsa) / a0);
+            sa1 = (float) ( 2.0 * ((A - 1.0) - (A + 1.0) * cw) / a0);
+            sa2 = (float) (((A + 1.0) - (A - 1.0) * cw - tsa) / a0);
+        }
+
+        void designHighPass (double fs, double fc, double Q)
+        {
+            const double w0 = juce::MathConstants<double>::twoPi * fc / fs;
+            const double cw = std::cos (w0);
+            const double alpha = std::sin (w0) / (2.0 * Q);
+            const double a0 = 1.0 + alpha;
+            hb0 = (float) (((1.0 + cw) * 0.5) / a0);
+            hb1 = (float) ((-(1.0 + cw)) / a0);
+            hb2 = (float) (((1.0 + cw) * 0.5) / a0);
+            ha1 = (float) ((-2.0 * cw) / a0);
+            ha2 = (float) ((1.0 - alpha) / a0);
+        }
+
+        float sb0 = 1, sb1 = 0, sb2 = 0, sa1 = 0, sa2 = 0;
+        float hb0 = 1, hb1 = 0, hb2 = 0, ha1 = 0, ha2 = 0;
+        std::vector<ChState> ch;
+    };
 }
