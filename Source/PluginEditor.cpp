@@ -136,6 +136,7 @@ namespace pp
         setResizable (false, false);
 
         setPage (startPage);
+        updateProEnablement();
         startTimerHz (60);
     }
 
@@ -233,6 +234,27 @@ namespace pp
         tabPro .setToggleState (pro, juce::dontSendNotification);
         tabEq  .setToggleState (eq,  juce::dontSendNotification);
         repaint();
+    }
+
+    void PicklePowerEditor::updateProEnablement()
+    {
+        auto& a = processorRef.getAPVTS();
+        const int mb   = a.getRawParameterValue (id::multiband) ->load() > 0.5f ? 1 : 0;
+        const int deq  = a.getRawParameterValue (id::dynEqOn)   ->load() > 0.5f ? 1 : 0;
+        const int spec = a.getRawParameterValue (id::spectralOn)->load() > 0.5f ? 1 : 0;
+
+        auto gate = [] (bool on, std::initializer_list<Knob*> ks)
+        {
+            for (auto* k : ks)
+            {
+                k->slider.setEnabled (on);                         // LookAndFeel dims when disabled
+                k->label.setColour (juce::Label::textColourId, on ? theme::neonLime : theme::textDim);
+            }
+        };
+
+        if (mb   != proMb)   { gate (mb,   { &mbLow, &mbMid, &mbHigh, &mbFreqLow, &mbFreqHigh }); proMb   = mb;   }
+        if (deq  != proDeq)  { gate (deq,  { &deqFreq1, &deqThr1, &deqRng1, &deqFreq2, &deqThr2, &deqRng2 }); proDeq  = deq;  }
+        if (spec != proSpec) { gate (spec, { &specAmount, &specTilt }); proSpec = spec; }
     }
 
     void PicklePowerEditor::layoutGrid (juce::Rectangle<int> area, const std::vector<Knob*>& knobs,
@@ -431,6 +453,8 @@ namespace pp
         jar.update (rms);
         pickle.update (peak, clip, nuclear);
         meter.update (rms, peak, gr);
+
+        updateProEnablement();   // keep section dimming in sync with toggles / presets
 
         if (nuclear != lastNuclear)
         {

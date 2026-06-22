@@ -42,6 +42,7 @@ namespace pp
         };
 
         void timerCallback() override;
+        void updateProEnablement();   // dim a Pro section's knobs when its toggle is off
         void setupKnob (Knob&, const juce::String& paramID, const juce::String& displayName);
         void setupCombo (juce::ComboBox&, juce::Label&, const juce::StringArray& items,
                          const juce::String& paramID, std::unique_ptr<APVTS::ComboBoxAttachment>&,
@@ -102,6 +103,10 @@ namespace pp
 
         juce::Rectangle<int> panelArea;
         bool lastNuclear = false;
+
+        // Cached Pro section on/off states so we only re-style (and repaint) the
+        // section knobs when a toggle actually changes, not every timer tick.
+        int proMb = -1, proDeq = -1, proSpec = -1;
 
         // Env-gated preview mode (PP_PICKLE_DEMO=1): synthesises a pulsing level so
         // the pickle / jar / meter animate without an audio device. No effect on the

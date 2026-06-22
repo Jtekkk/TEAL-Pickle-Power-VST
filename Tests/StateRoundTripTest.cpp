@@ -30,7 +30,6 @@ int main()
 
     pp::PicklePowerProcessor proc;
     proc.prepareToPlay (48000.0, 512);
-    auto& apvts = proc.getAPVTS();
 
     int failures = 0;
     auto check = [&] (bool ok, const juce::String& msg)
@@ -82,10 +81,55 @@ int main()
         }
     }
 
-    if (failures == 0)
-        check (true, "all " + juce::String (proc.getParameters().size())
-                     + " parameters round-trip through save/restore");
+    check (failures == 0, "all " + juce::String (proc.getParameters().size())
+                          + " parameters round-trip through save/restore");
 
-    std::cout << (failures == 0 ? "\nSTATE ROUND-TRIP OK\n" : "\nSTATE ROUND-TRIP FAILED\n");
+    //==========================================================================
+    std::cout << "\nFactory presets:" << std::endl;
+    {
+        auto& pm = proc.getPresetManager();
+        auto& a  = proc.getAPVTS();
+        auto raw = [&] (const char* pid) { return a.getRawParameterValue (pid)->load(); };
+
+        const int n = pm.getNumFactory();
+        check (n >= 10, "factory bank is well stocked (" + juce::String (n) + " presets)");
+
+        // Apply every preset: must not crash and must leave all params finite/in-range.
+        bool allFinite = true;
+        for (int i = 0; i < n; ++i)
+        {
+            pm.applyFactory (i);
+            for (auto* base : proc.getParameters())
+                if (auto* p = dynamic_cast<juce::RangedAudioParameter*> (base))
+                {
+                    const float v = p->getValue();
+                    if (! std::isfinite (v) || v < -0.001f || v > 1.001f) allFinite = false;
+                }
+        }
+        check (allFinite, "every factory preset leaves all params finite and in [0,1]");
+
+        // Stale-state guard: engage Multiband, then load a preset that doesn't use it
+        // — applyFactory must reset it back to default (off).
+        if (auto* mbp = a.getParameter (pp::id::multiband))
+            mbp->setValueNotifyingHost (1.0f);
+        const int vocalGlue = pm.getFactoryNames().indexOf ("Vocal Glue");
+        if (vocalGlue >= 0) pm.applyFactory (vocalGlue);
+        check (raw (pp::id::multiband) < 0.5f, "preset apply clears stale Multiband state");
+
+        // A Pro preset must actually engage its Pro features.
+        const int master = pm.getFactoryNames().indexOf ("Master Polish");
+        if (master >= 0) pm.applyFactory (master);
+        check (master >= 0 && raw (pp::id::multiband)  > 0.5f
+                           && raw (pp::id::dynEqOn)    > 0.5f
+                           && raw (pp::id::spectralOn) > 0.5f,
+               "'Master Polish' engages Multiband + Dyn EQ + Spectral");
+
+        // Bypass is transport, not sound: a preset change must leave it untouched.
+        if (auto* bp = a.getParameter (pp::id::bypass)) bp->setValueNotifyingHost (1.0f);
+        pm.applyFactory (0);
+        check (raw (pp::id::bypass) > 0.5f, "preset apply preserves Bypass state");
+    }
+
+    std::cout << (failures == 0 ? "\nSTATE + PRESETS OK\n" : "\nSTATE + PRESETS FAILED\n");
     return failures == 0 ? 0 : 1;
 }
