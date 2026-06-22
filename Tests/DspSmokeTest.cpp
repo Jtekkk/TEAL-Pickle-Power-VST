@@ -170,6 +170,33 @@ int main()
     }
 
     //==========================================================================
+    std::cout << "\nTrue-peak limiter — inter-sample peaks:" << std::endl;
+    {
+        pp::TruePeakLimiter lim;
+        lim.prepare (sr, channels);
+        lim.setCeiling (-1.0f);
+        const float ceil = juce::Decibels::decibelsToGain (-1.0f);
+        const float A = ceil * 1.41421356f;   // samples sit at the ceiling; true peak ≈ +3 dB
+
+        juce::AudioBuffer<float> buffer (channels, block);
+        for (int n = 0; n < 80; ++n)
+        {
+            for (int s = 0; s < block; ++s)
+            {
+                const float ph = juce::MathConstants<float>::halfPi * (float) (n * block + s)
+                               + juce::MathConstants<float>::pi * 0.25f;   // fs/4, 45°
+                const float v = A * std::sin (ph);
+                for (int ch = 0; ch < channels; ++ch) buffer.setSample (ch, s, v);
+            }
+            juce::dsp::AudioBlock<float> blk (buffer);
+            lim.process (blk);
+        }
+        check (lim.getGainReductionDb() > 1.0f,
+               "limiter reacts to inter-sample peaks a sample-peak limiter misses (GR "
+                   + juce::String (lim.getGainReductionDb(), 2) + " dB)");
+    }
+
+    //==========================================================================
     std::cout << "\nImpulse + silence (stability / denormals):" << std::endl;
     {
         pp::BrineSaturator brine;
