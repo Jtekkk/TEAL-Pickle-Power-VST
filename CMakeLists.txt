@@ -128,4 +128,32 @@ if(PP_BUILD_TESTS)
 
     enable_testing()
     add_test(NAME DspSmokeTest COMMAND PicklePowerTest)
+
+    #--------------------------------------------------------------------------
+    # State round-trip diagnostic (links the real processor): -DPP_BUILD_TESTS=ON
+    #--------------------------------------------------------------------------
+    juce_add_console_app(PicklePowerStateTest PRODUCT_NAME "PicklePowerStateTest")
+
+    target_sources(PicklePowerStateTest PRIVATE
+        Tests/StateRoundTripTest.cpp
+        Source/PluginProcessor.cpp
+        Source/PluginEditor.cpp)
+
+    target_compile_definitions(PicklePowerStateTest PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_USE_MP3AUDIOFORMAT=1
+        JUCE_STANDALONE_APPLICATION=1)
+
+    target_link_libraries(PicklePowerStateTest
+        PRIVATE
+            PicklePowerData
+            juce::juce_audio_utils
+            juce::juce_audio_formats
+            juce::juce_dsp
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
+    add_test(NAME StateRoundTripTest COMMAND PicklePowerStateTest)
 endif()

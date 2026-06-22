@@ -661,8 +661,28 @@ namespace pp
     void PicklePowerProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         if (auto xml = getXmlFromBinary (data, sizeInBytes))
+        {
             if (xml->hasTagName (apvts.state.getType()))
+            {
                 apvts.replaceState (juce::ValueTree::fromXml (*xml));
+
+                // Re-assert every parameter from the restored tree. APVTS only pushes
+                // a tree value to its parameter when the *snapped* tree value changes,
+                // so a stepped/bool/choice parameter can keep a stale raw value when
+                // the restored value snaps to the same step it already had (e.g. a host
+                // that set the value via the low-level setValue path). Forcing the set
+                // here makes state restoration robust regardless of the prior value.
+                for (auto child : apvts.state)
+                {
+                    const auto pid = child.getProperty ("id").toString();
+                    if (auto* p = apvts.getParameter (pid))
+                    {
+                        const float plain = (float) (double) child.getProperty ("value");
+                        p->setValueNotifyingHost (p->convertTo0to1 (plain));
+                    }
+                }
+            }
+        }
     }
 }
 
