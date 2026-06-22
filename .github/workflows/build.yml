@@ -174,9 +174,17 @@ jobs:
       - name: Collect release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.exe' -o -name '*.pkg' \
-            -o -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release/ \;
+          # Only the named installers / packages (all start with "PicklePower"),
+          # not the bare standalone "Pickle Power.exe" build output.
+          find artifacts -type f -name 'PicklePower*' \
+            \( -name '*.exe' -o -name '*.pkg' -o -name '*.zip' -o -name '*.tar.gz' \) \
+            -exec cp {} release/ \;
           echo "Release files:"; ls -la release
+
+      - name: Remove any previous release for this tag (clean re-publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "${{ steps.ver.outputs.tag }}" --cleanup-tag --yes || true
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
