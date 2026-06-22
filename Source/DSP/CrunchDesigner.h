@@ -111,8 +111,8 @@ namespace pp
         juce::SmoothedValue<float> attackSmoothed, sustainSmoothed;
 
         static constexpr float sens     = 8.0f;
-        static constexpr float maxAttDb = 15.0f;
-        static constexpr float maxSusDb = 15.0f;
+        static constexpr float maxAttDb = 15.0f;   // SPL Transient Designer attack range
+        static constexpr float maxSusDb = 24.0f;   // SPL Transient Designer sustain range
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CrunchDesigner)
     };

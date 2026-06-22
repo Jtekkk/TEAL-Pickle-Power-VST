@@ -28,10 +28,10 @@ namespace pp
     class SpectralSaturator
     {
     public:
-        static constexpr int fftOrder = 9;
-        static constexpr int fftSize  = 1 << fftOrder;   // 512
-        static constexpr int hop      = fftSize / 4;     // 128 (75 % overlap)
-        static constexpr int latency  = fftSize - hop;   // 384
+        static constexpr int fftOrder = 10;
+        static constexpr int fftSize  = 1 << fftOrder;   // 1024 (finer bins for tonal material)
+        static constexpr int hop      = fftSize / 4;     // 256 (75 % overlap)
+        static constexpr int latency  = fftSize - hop;   // 768
 
         SpectralSaturator() : fft (fftOrder)
         {
