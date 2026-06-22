@@ -16,6 +16,7 @@
 #include "GUI/DancingPickleComponent.h"
 #include "GUI/PickleJarComponent.h"
 #include "GUI/PickleMeter.h"
+#include "GUI/SpectrumAnalyzer.h"
 
 namespace pp
 {
@@ -57,6 +58,7 @@ namespace pp
         PickleJarComponent     jar;
         DancingPickleComponent pickle;
         PickleMeter            meter;
+        SpectrumAnalyzer       analyzer { processorRef };
 
         Knob brine, crunchAtk, crunchSus, snapLow, snapMid, snapHigh,
              ferment, age, juice, width, mix, output;

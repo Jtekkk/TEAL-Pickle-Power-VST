@@ -76,6 +76,10 @@ namespace pp
         float getMeterPeak()       const noexcept { return meterPeak.load(); }
         float getGainReductionDb() const noexcept { return meterGR.load(); }
         bool  isNuclear()          const noexcept { return nuclearMode.load(); }
+        float getDeqGainDb (int band) const noexcept { return deqGainDb[band].load(); }
+
+        /** Drains up to @p maxSamples of recent output (mono) for the UI analyzer. */
+        int readAnalyzer (float* dest, int maxSamples);
 
         static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -88,6 +92,7 @@ namespace pp
         void applyMixAndGain (juce::AudioBuffer<float>&, bool autoGainOn);
         void updateMeters    (const juce::AudioBuffer<float>&);
         void updateNuclearState();
+        void pushAnalyzer    (const juce::AudioBuffer<float>&);
 
         static void encodeMidSide (juce::AudioBuffer<float>&);
         static void decodeMidSide (juce::AudioBuffer<float>&);
@@ -118,10 +123,21 @@ namespace pp
 
         float  autoGainGain = 1.0f;   // smoothed auto-gain compensation
 
+        // Dev/demo aid (PP_PICKLE_DEMO env): inject a test tone so the analyzer /
+        // meters / pickle show real activity without an audio device. No effect
+        // unless the env var is set.
+        bool   demoInject = false;
+        double demoInjectPhase = 0.0;
+
         std::atomic<float> meterRms  { 0.0f };
         std::atomic<float> meterPeak { 0.0f };
         std::atomic<float> meterGR   { 0.0f };
         std::atomic<bool>  nuclearMode { false };
+        std::atomic<float> deqGainDb[2] { { 0.0f }, { 0.0f } };
+
+        // Lock-free output tap for the UI spectrum analyzer.
+        juce::AbstractFifo analyzerFifo { 1 << 14 };
+        std::vector<float> analyzerBuffer;
 
         // Cached raw parameter pointers.
         std::atomic<float>* pBypass        = nullptr;

@@ -55,6 +55,9 @@ namespace pp
         pSpectralOn     = apvts.getRawParameterValue (id::spectralOn);
         pSpectralAmount = apvts.getRawParameterValue (id::spectralAmount);
         pSpectralTilt   = apvts.getRawParameterValue (id::spectralTilt);
+
+        analyzerBuffer.assign ((size_t) analyzerFifo.getTotalSize(), 0.0f);
+        demoInject = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0") != "0";
     }
 
     //==============================================================================
@@ -276,6 +279,21 @@ namespace pp
         for (int ch = totalIn; ch < totalOut; ++ch)
             buffer.clear (ch, 0, numSamples);
 
+        if (demoInject)
+        {
+            const double sr = juce::jmax (8000.0, getSampleRate());
+            for (int s = 0; s < numSamples; ++s)
+            {
+                const double t = demoInjectPhase + (double) s / sr;
+                const float v = 0.35f * std::sin (juce::MathConstants<float>::twoPi * 220.0f  * (float) t)
+                              + 0.22f * std::sin (juce::MathConstants<float>::twoPi * 1320.0f * (float) t)
+                              + 0.12f * std::sin (juce::MathConstants<float>::twoPi * 6000.0f * (float) t);
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.setSample (ch, s, v);
+            }
+            demoInjectPhase += (double) numSamples / sr;
+        }
+
         updateNuclearState();
 
         // Reconfigure oversampling off-thread if the user changed it.
@@ -287,6 +305,7 @@ namespace pp
         if (pBypass->load() > 0.5f)
         {
             updateMeters (buffer);
+            pushAnalyzer (buffer);
             return;
         }
 
@@ -357,6 +376,9 @@ namespace pp
         limiter.process (block);
 
         updateMeters (buffer);
+        deqGainDb[0].store (deqOn ? dynamicEq.getGainDb (0) : 0.0f);
+        deqGainDb[1].store (deqOn ? dynamicEq.getGainDb (1) : 0.0f);
+        pushAnalyzer (buffer);
     }
 
     //==============================================================================
@@ -472,6 +494,47 @@ namespace pp
         meterRms.store (std::sqrt (sumSq / (float) (numCh * numSamples)));
         meterPeak.store (peak);
         meterGR.store (limiter.getGainReductionDb());
+    }
+
+    void PicklePowerProcessor::pushAnalyzer (const juce::AudioBuffer<float>& buffer)
+    {
+        const int n   = buffer.getNumSamples();
+        const int chs = buffer.getNumChannels();
+        if (n <= 0 || chs <= 0 || analyzerBuffer.empty())
+            return;
+
+        const int toWrite = juce::jmin (n, analyzerFifo.getFreeSpace());
+        if (toWrite <= 0)
+            return;
+
+        const float norm = 1.0f / (float) chs;
+        auto mono = [&] (int i)
+        {
+            float sum = 0.0f;
+            for (int ch = 0; ch < chs; ++ch)
+                sum += buffer.getSample (ch, i);
+            return sum * norm;
+        };
+
+        int s1, sz1, s2, sz2;
+        analyzerFifo.prepareToWrite (toWrite, s1, sz1, s2, sz2);
+        for (int i = 0; i < sz1; ++i) analyzerBuffer[(size_t) (s1 + i)] = mono (i);
+        for (int i = 0; i < sz2; ++i) analyzerBuffer[(size_t) (s2 + i)] = mono (sz1 + i);
+        analyzerFifo.finishedWrite (sz1 + sz2);
+    }
+
+    int PicklePowerProcessor::readAnalyzer (float* dest, int maxSamples)
+    {
+        const int toRead = juce::jmin (maxSamples, analyzerFifo.getNumReady());
+        if (toRead <= 0)
+            return 0;
+
+        int s1, sz1, s2, sz2;
+        analyzerFifo.prepareToRead (toRead, s1, sz1, s2, sz2);
+        for (int i = 0; i < sz1; ++i) dest[i] = analyzerBuffer[(size_t) (s1 + i)];
+        for (int i = 0; i < sz2; ++i) dest[sz1 + i] = analyzerBuffer[(size_t) (s2 + i)];
+        analyzerFifo.finishedRead (sz1 + sz2);
+        return sz1 + sz2;
     }
 
     void PicklePowerProcessor::updateNuclearState()

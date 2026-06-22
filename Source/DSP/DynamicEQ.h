@@ -64,6 +64,9 @@ namespace pp
             }
         }
 
+        /** Current dynamic gain (dB) applied to band @p i — for UI feedback. */
+        float getGainDb (int i) const noexcept { return bands[(size_t) i].gainDb; }
+
         void setBand (int i, float freqHz, float thresholdDb, float rangeDb)
         {
             auto& b = bands[(size_t) i];

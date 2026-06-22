@@ -22,6 +22,7 @@ namespace pp
         addAndMakeVisible (jar);
         addAndMakeVisible (pickle);
         addAndMakeVisible (meter);
+        addAndMakeVisible (analyzer);
 
         setupKnob (brine,     id::brine,         "BRINE");
         setupKnob (crunchAtk, id::crunchAttack,  "ATTACK");
@@ -113,6 +114,19 @@ namespace pp
             processorRef.getPresetManager().applyFactory (demoPreset);
             presetBox.setSelectedId (demoPreset + 1, juce::dontSendNotification);
             startPage = (demoVal == "2") ? 1 : (demoVal == "3") ? 2 : 0;   // open PRO / EQ page
+
+            auto setP = [this] (const juce::String& pid, float v)
+            {
+                if (auto* p = processorRef.getAPVTS().getParameter (pid))
+                    p->setValueNotifyingHost (p->convertTo0to1 (v));
+            };
+            setP (id::multiband, 1.0f);            // show crossover markers on the scope
+            if (startPage == 2)
+            {
+                setP (id::dynEqOn, 1.0f);          // show the live EQ curve
+                setP (id::deqThresh1, -45.0f); setP (id::deqRange1,  10.0f);
+                setP (id::deqThresh2, -45.0f); setP (id::deqRange2,  -8.0f);
+            }
         }
 
         setSize (meta::editorWidth, meta::editorHeight);
@@ -335,7 +349,10 @@ namespace pp
 
         // Right: control panel (MAIN and PRO pages share the area; visibility toggles).
         panelArea = content;
-        const auto right = content.reduced (12);
+        auto panel = content.reduced (12);
+        analyzer.setBounds (panel.removeFromTop (96));   // shared scope strip
+        panel.removeFromTop (8);
+        const auto right = panel;
 
         // ---- MAIN page ----
         {

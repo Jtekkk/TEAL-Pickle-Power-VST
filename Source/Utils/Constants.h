@@ -26,7 +26,7 @@ namespace pp
         inline constexpr const char* pluginName   = "Pickle Power";
         inline constexpr const char* version      = "0.1.0";
         inline constexpr int         editorWidth  = 760;
-        inline constexpr int         editorHeight = 600;
+        inline constexpr int         editorHeight = 700;
     }
 
     //==============================================================================
