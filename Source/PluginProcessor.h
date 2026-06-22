@@ -28,6 +28,8 @@
 #include "DSP/FermentationEngine.h"
 #include "DSP/PickleJuice.h"
 #include "DSP/MultibandSaturator.h"
+#include "DSP/DynamicEQ.h"
+#include "DSP/SpectralSaturator.h"
 #include "DSP/TruePeakLimiter.h"
 
 namespace pp
@@ -101,6 +103,8 @@ namespace pp
         FermentationEngine fermentation;
         PickleJuice        pickleJuice;
         MultibandSaturator multiband;
+        DynamicEQ          dynamicEq;
+        SpectralSaturator  spectral;
         TruePeakLimiter    limiter;
 
         juce::AudioBuffer<float> dryBuffer;
@@ -110,6 +114,7 @@ namespace pp
         int    hostBlock      = 0;
         int    numChannels    = 2;
         OversampleChoice currentOversampleChoice = OversampleChoice::Off;
+        bool   currentSpectralOn = false;   // re-prepare PDC when this toggles
 
         float  autoGainGain = 1.0f;   // smoothed auto-gain compensation
 
@@ -144,6 +149,18 @@ namespace pp
         std::atomic<float>* pMbHigh       = nullptr;
         std::atomic<float>* pMbFreqLow    = nullptr;
         std::atomic<float>* pMbFreqHigh   = nullptr;
+
+        std::atomic<float>* pDynEqOn      = nullptr;
+        std::atomic<float>* pDeqFreq1     = nullptr;
+        std::atomic<float>* pDeqThresh1   = nullptr;
+        std::atomic<float>* pDeqRange1    = nullptr;
+        std::atomic<float>* pDeqFreq2     = nullptr;
+        std::atomic<float>* pDeqThresh2   = nullptr;
+        std::atomic<float>* pDeqRange2    = nullptr;
+
+        std::atomic<float>* pSpectralOn     = nullptr;
+        std::atomic<float>* pSpectralAmount = nullptr;
+        std::atomic<float>* pSpectralTilt   = nullptr;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerProcessor)
     };

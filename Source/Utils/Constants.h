@@ -59,6 +59,18 @@ namespace pp
         inline constexpr const char* mbHigh        = "mbHigh";
         inline constexpr const char* mbFreqLow     = "mbFreqLow";
         inline constexpr const char* mbFreqHigh    = "mbFreqHigh";
+
+        inline constexpr const char* dynEqOn       = "dynEqOn";
+        inline constexpr const char* deqFreq1      = "deqFreq1";
+        inline constexpr const char* deqThresh1    = "deqThresh1";
+        inline constexpr const char* deqRange1     = "deqRange1";
+        inline constexpr const char* deqFreq2      = "deqFreq2";
+        inline constexpr const char* deqThresh2    = "deqThresh2";
+        inline constexpr const char* deqRange2     = "deqRange2";
+
+        inline constexpr const char* spectralOn     = "spectralOn";
+        inline constexpr const char* spectralAmount = "spectralAmount";
+        inline constexpr const char* spectralTilt   = "spectralTilt";
     }
 
     namespace name
@@ -88,6 +100,18 @@ namespace pp
         inline constexpr const char* mbHigh        = "MB High";
         inline constexpr const char* mbFreqLow     = "MB Freq Low";
         inline constexpr const char* mbFreqHigh    = "MB Freq High";
+
+        inline constexpr const char* dynEqOn       = "Dynamic EQ";
+        inline constexpr const char* deqFreq1      = "DEQ 1 Freq";
+        inline constexpr const char* deqThresh1    = "DEQ 1 Threshold";
+        inline constexpr const char* deqRange1     = "DEQ 1 Range";
+        inline constexpr const char* deqFreq2      = "DEQ 2 Freq";
+        inline constexpr const char* deqThresh2    = "DEQ 2 Threshold";
+        inline constexpr const char* deqRange2     = "DEQ 2 Range";
+
+        inline constexpr const char* spectralOn     = "Spectral Sat";
+        inline constexpr const char* spectralAmount = "Spectral Amount";
+        inline constexpr const char* spectralTilt   = "Spectral Tilt";
     }
 
     //==============================================================================

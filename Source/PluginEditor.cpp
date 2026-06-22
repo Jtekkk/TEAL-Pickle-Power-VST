@@ -73,8 +73,20 @@ namespace pp
         setupKnob (mbFreqLow,  id::mbFreqLow,  "X-LOW");
         setupKnob (mbFreqHigh, id::mbFreqHigh, "X-HIGH");
 
-        // ---- MAIN / PRO tabs ----
-        for (auto* t : { &tabMain, &tabPro })
+        // ---- EQ page controls (Dynamic EQ + Spectral Saturation) ----
+        setupToggle (dynEqButton,   dynEqLabel,    id::dynEqOn,   dynEqAttachment,   "DYN EQ");
+        setupToggle (spectralButton, spectralLabel, id::spectralOn, spectralAttachment, "SPECTRAL");
+        setupKnob (deqFreq1,   id::deqFreq1,   "LO FREQ");
+        setupKnob (deqThr1,    id::deqThresh1, "LO THRESH");
+        setupKnob (deqRng1,    id::deqRange1,  "LO RANGE");
+        setupKnob (deqFreq2,   id::deqFreq2,   "HI FREQ");
+        setupKnob (deqThr2,    id::deqThresh2, "HI THRESH");
+        setupKnob (deqRng2,    id::deqRange2,  "HI RANGE");
+        setupKnob (specAmount, id::spectralAmount, "SPEC AMT");
+        setupKnob (specTilt,   id::spectralTilt,   "SPEC TILT");
+
+        // ---- MAIN / PRO / EQ tabs ----
+        for (auto* t : { &tabMain, &tabPro, &tabEq })
         {
             t->setClickingTogglesState (true);
             t->setRadioGroupId (100);
@@ -84,8 +96,9 @@ namespace pp
             t->setColour (juce::TextButton::textColourOnId,   theme::textBright);
             addAndMakeVisible (*t);
         }
-        tabMain.onClick = [this] { setPage (false); };
-        tabPro .onClick = [this] { setPage (true); };
+        tabMain.onClick = [this] { setPage (0); };
+        tabPro .onClick = [this] { setPage (1); };
+        tabEq  .onClick = [this] { setPage (2); };
 
         const auto demoVal = juce::SystemStats::getEnvironmentVariable ("PP_PICKLE_DEMO", "0");
         demoMode = demoVal != "0";
@@ -94,13 +107,13 @@ namespace pp
             const int demoPreset = 2;   // "Punchy Snare" — shows off the new controls
             processorRef.getPresetManager().apply (demoPreset);
             presetBox.setSelectedItemIndex (demoPreset, juce::dontSendNotification);
-            startOnProPage = (demoVal == "2");   // PP_PICKLE_DEMO=2 opens the PRO page
+            startPage = (demoVal == "2") ? 1 : (demoVal == "3") ? 2 : 0;   // open PRO / EQ page
         }
 
         setSize (meta::editorWidth, meta::editorHeight);
         setResizable (false, false);
 
-        setPage (startOnProPage);
+        setPage (startPage);
         startTimerHz (60);
     }
 
@@ -166,10 +179,12 @@ namespace pp
             processorRef.getAPVTS(), paramID, b);
     }
 
-    void PicklePowerEditor::setPage (bool pro)
+    void PicklePowerEditor::setPage (int page)
     {
-        showingPro = pro;
-        const bool m = ! pro;
+        currentPage = page;
+        const bool m   = page == 0;
+        const bool pro = page == 1;
+        const bool eq  = page == 2;
 
         const std::array<Knob*, 12> mainKnobs {
             &brine, &crunchAtk, &crunchSus, &snapLow, &snapMid, &snapHigh,
@@ -185,8 +200,16 @@ namespace pp
         autoGainButton.setVisible (pro);  autoGainLabel.setVisible (pro);
         multibandButton.setVisible (pro); multibandLabel.setVisible (pro);
 
+        const std::array<Knob*, 8> eqKnobs {
+            &deqFreq1, &deqThr1, &deqRng1, &deqFreq2, &deqThr2, &deqRng2, &specAmount, &specTilt
+        };
+        for (auto* k : eqKnobs) { k->slider.setVisible (eq); k->label.setVisible (eq); }
+        dynEqButton.setVisible (eq);    dynEqLabel.setVisible (eq);
+        spectralButton.setVisible (eq); spectralLabel.setVisible (eq);
+
         tabMain.setToggleState (m,   juce::dontSendNotification);
         tabPro .setToggleState (pro, juce::dontSendNotification);
+        tabEq  .setToggleState (eq,  juce::dontSendNotification);
         repaint();
     }
 
@@ -243,9 +266,11 @@ namespace pp
         auto presetArea = header.removeFromRight (200).reduced (4, 12);
         presetLabel.setBounds (presetArea.removeFromLeft (46));
         presetBox.setBounds (presetArea);
-        auto tabArea = header.removeFromRight (124).reduced (8, 13);
-        tabMain.setBounds (tabArea.removeFromLeft (tabArea.getWidth() / 2).reduced (2, 0));
-        tabPro .setBounds (tabArea.reduced (2, 0));
+        auto tabArea = header.removeFromRight (150).reduced (6, 13);
+        const int tw = tabArea.getWidth() / 3;
+        tabMain.setBounds (tabArea.removeFromLeft (tw).reduced (2, 0));
+        tabPro .setBounds (tabArea.removeFromLeft (tw).reduced (2, 0));
+        tabEq  .setBounds (tabArea.reduced (2, 0));
 
         auto content = area.reduced (16, 8);
 
@@ -294,6 +319,22 @@ namespace pp
 
             r.removeFromTop (8);
             layoutGrid (r, { &mbLow, &mbMid, &mbHigh, &mbFreqLow, &mbFreqHigh }, 3, 2);
+        }
+
+        // ---- EQ page (Dynamic EQ + Spectral) ----
+        {
+            auto r = right;
+            auto top = r.removeFromTop (66);
+            auto e1 = top.removeFromLeft (top.getWidth() / 2).reduced (6, 2);
+            dynEqLabel.setBounds (e1.removeFromTop (16));
+            dynEqButton.setBounds (e1.removeFromTop (32).withSizeKeepingCentre (46, 28));
+            auto e2 = top.reduced (6, 2);
+            spectralLabel.setBounds (e2.removeFromTop (16));
+            spectralButton.setBounds (e2.removeFromTop (32).withSizeKeepingCentre (46, 28));
+
+            r.removeFromTop (8);
+            layoutGrid (r, { &deqFreq1, &deqThr1, &deqRng1, &deqFreq2, &deqThr2, &deqRng2,
+                             &specAmount, &specTilt }, 3, 3);
         }
     }
 

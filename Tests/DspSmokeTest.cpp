@@ -21,6 +21,8 @@
 #include "../Source/DSP/FermentationEngine.h"
 #include "../Source/DSP/PickleJuice.h"
 #include "../Source/DSP/MultibandSaturator.h"
+#include "../Source/DSP/DynamicEQ.h"
+#include "../Source/DSP/SpectralSaturator.h"
 #include "../Source/DSP/TruePeakLimiter.h"
 
 namespace
@@ -247,6 +249,81 @@ int main()
         }
         check (finite, "driven multiband output is finite");
         check (maxPeak < 10.0f, "driven multiband stays bounded (peak " + juce::String (maxPeak, 2) + ")");
+    }
+
+    //==========================================================================
+    std::cout << "\nDynamic EQ (Pro):" << std::endl;
+    {
+        pp::DynamicEQ deq;
+        deq.prepare (sr, channels);
+        juce::AudioBuffer<float> buffer (channels, block);
+
+        // Range 0 -> exactly transparent.
+        deq.setBand (0, 180.0f, -24.0f, 0.0f);
+        deq.setBand (1, 6000.0f, -24.0f, 0.0f);
+        float inRms = 0.0f, outRms = 0.0f;
+        for (int n = 0; n < 8; ++n)
+        {
+            fillSine (buffer, sr, 800.0f, 0.5f);
+            inRms = buffer.getRMSLevel (0, 0, block);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            deq.process (blk);
+            outRms = buffer.getRMSLevel (0, 0, block);
+        }
+        check (std::abs (outRms - inRms) < inRms * 0.02f, "range 0 is transparent");
+
+        // Active bands: finite + bounded.
+        deq.setBand (0, 180.0f, -30.0f, -18.0f);
+        deq.setBand (1, 6000.0f, -30.0f, 12.0f);
+        bool finite = true; float maxPeak = 0.0f;
+        for (int n = 0; n < 40; ++n)
+        {
+            fillSine (buffer, sr, 180.0f, 0.7f);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            deq.process (blk);
+            finite = finite && allFinite (buffer);
+            maxPeak = juce::jmax (maxPeak, buffer.getMagnitude (0, block));
+        }
+        check (finite, "active dynamic EQ is finite");
+        check (maxPeak < 8.0f, "active dynamic EQ stays bounded (peak " + juce::String (maxPeak, 2) + ")");
+    }
+
+    //==========================================================================
+    std::cout << "\nSpectral saturator (Pro):" << std::endl;
+    {
+        pp::SpectralSaturator ss;
+        ss.prepare (sr, channels);
+        juce::AudioBuffer<float> buffer (channels, block);
+
+        // Amount 0 -> STFT reconstructs the input (RMS preserved once warmed up).
+        ss.setParameters (0.0f, 0.0f);
+        float inRms = 0.0f, outRms = 0.0f;
+        for (int n = 0; n < 24; ++n)
+        {
+            fillSine (buffer, sr, 1000.0f, 0.5f);
+            inRms = buffer.getRMSLevel (0, 0, block);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            ss.process (blk);
+            outRms = buffer.getRMSLevel (0, 0, block);
+        }
+        check (std::abs (outRms - inRms) < inRms * 0.05f,
+               "amount 0 reconstructs (RMS " + juce::String (inRms, 3)
+                   + " -> " + juce::String (outRms, 3) + ")");
+        check (ss.getLatencySamples() > 0.0f, "spectral reports latency");
+
+        // Driven: finite + bounded.
+        ss.setParameters (0.9f, 0.5f);
+        bool finite = true; float maxPeak = 0.0f;
+        for (int n = 0; n < 40; ++n)
+        {
+            fillSine (buffer, sr, 1000.0f, 0.6f);
+            juce::dsp::AudioBlock<float> blk (buffer);
+            ss.process (blk);
+            finite = finite && allFinite (buffer);
+            maxPeak = juce::jmax (maxPeak, buffer.getMagnitude (0, block));
+        }
+        check (finite, "driven spectral output is finite");
+        check (maxPeak < 8.0f, "driven spectral stays bounded (peak " + juce::String (maxPeak, 2) + ")");
     }
 
     //==========================================================================

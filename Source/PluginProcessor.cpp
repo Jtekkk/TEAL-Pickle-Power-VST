@@ -43,6 +43,18 @@ namespace pp
         pMbHigh       = apvts.getRawParameterValue (id::mbHigh);
         pMbFreqLow    = apvts.getRawParameterValue (id::mbFreqLow);
         pMbFreqHigh   = apvts.getRawParameterValue (id::mbFreqHigh);
+
+        pDynEqOn      = apvts.getRawParameterValue (id::dynEqOn);
+        pDeqFreq1     = apvts.getRawParameterValue (id::deqFreq1);
+        pDeqThresh1   = apvts.getRawParameterValue (id::deqThresh1);
+        pDeqRange1    = apvts.getRawParameterValue (id::deqRange1);
+        pDeqFreq2     = apvts.getRawParameterValue (id::deqFreq2);
+        pDeqThresh2   = apvts.getRawParameterValue (id::deqThresh2);
+        pDeqRange2    = apvts.getRawParameterValue (id::deqRange2);
+
+        pSpectralOn     = apvts.getRawParameterValue (id::spectralOn);
+        pSpectralAmount = apvts.getRawParameterValue (id::spectralAmount);
+        pSpectralTilt   = apvts.getRawParameterValue (id::spectralTilt);
     }
 
     //==============================================================================
@@ -144,6 +156,43 @@ namespace pp
             NormalisableRange<float> (1000.0f, 12000.0f, 1.0f, 0.4f), 2500.0f,
             AudioParameterFloatAttributes().withLabel (" Hz")));
 
+        //---- PRO: Dynamic EQ --------------------------------------------------
+        layout.add (std::make_unique<AudioParameterBool> (
+            ParameterID { id::dynEqOn, 1 }, name::dynEqOn, false));
+
+        auto hz = [] { return AudioParameterFloatAttributes().withLabel (" Hz"); };
+        auto db = [] { return AudioParameterFloatAttributes().withLabel (" dB"); };
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqFreq1, 1 }, name::deqFreq1,
+            NormalisableRange<float> (40.0f, 2000.0f, 1.0f, 0.3f), 180.0f, hz()));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqThresh1, 1 }, name::deqThresh1,
+            NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -24.0f, db()));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqRange1, 1 }, name::deqRange1,
+            NormalisableRange<float> (-24.0f, 24.0f, 0.1f), 0.0f, db()));
+
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqFreq2, 1 }, name::deqFreq2,
+            NormalisableRange<float> (1000.0f, 16000.0f, 1.0f, 0.4f), 6000.0f, hz()));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqThresh2, 1 }, name::deqThresh2,
+            NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -24.0f, db()));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::deqRange2, 1 }, name::deqRange2,
+            NormalisableRange<float> (-24.0f, 24.0f, 0.1f), 0.0f, db()));
+
+        //---- PRO: Spectral Saturation ----------------------------------------
+        layout.add (std::make_unique<AudioParameterBool> (
+            ParameterID { id::spectralOn, 1 }, name::spectralOn, false));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::spectralAmount, 1 }, name::spectralAmount,
+            NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, pct()));
+        layout.add (std::make_unique<AudioParameterFloat> (
+            ParameterID { id::spectralTilt, 1 }, name::spectralTilt,
+            NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f, pct()));
+
         return layout;
     }
 
@@ -174,8 +223,13 @@ namespace pp
         pickleJuice  .prepare (osRate, numChannels);
         multiband    .prepare (osRate, numChannels, osBlock);
 
+        // Dynamic EQ and Spectral run at host rate (post-downsample).
+        dynamicEq.prepare (sampleRate, numChannels);
+        spectral .prepare (sampleRate, numChannels);
+
         limiter.prepare (sampleRate, numChannels);
         autoGainGain = 1.0f;
+        currentSpectralOn = pSpectralOn->load() > 0.5f;
 
         widthSmoothed .reset (sampleRate, 0.02);
         mixSmoothed   .reset (sampleRate, 0.02);
@@ -184,7 +238,8 @@ namespace pp
         dryBuffer.setSize (numChannels, samplesPerBlock, false, false, true);
 
         setLatencySamples ((int) std::round (oversampler.getLatencySamples()
-                                             + limiter.getLatencySamples()));
+                                             + limiter.getLatencySamples()
+                                             + (currentSpectralOn ? spectral.getLatencySamples() : 0.0f)));
 
         meterRms = meterPeak = meterGR = 0.0f;
     }
@@ -225,7 +280,8 @@ namespace pp
 
         // Reconfigure oversampling off-thread if the user changed it.
         const auto desiredOs = (OversampleChoice) (int) std::round (pOversampling->load());
-        if (desiredOs != currentOversampleChoice)
+        const bool desiredSpectral = pSpectralOn->load() > 0.5f;
+        if (desiredOs != currentOversampleChoice || desiredSpectral != currentSpectralOn)
             triggerAsyncUpdate();
 
         if (pBypass->load() > 0.5f)
@@ -252,6 +308,9 @@ namespace pp
         pickleJuice.setParameters (pPickleJuice->load() * 0.01f);
         multiband.setParameters (pMbLow->load()  * 0.01f, pMbMid->load() * 0.01f,
                                  pMbHigh->load() * 0.01f, pMbFreqLow->load(), pMbFreqHigh->load());
+        dynamicEq.setBand (0, pDeqFreq1->load(), pDeqThresh1->load(), pDeqRange1->load());
+        dynamicEq.setBand (1, pDeqFreq2->load(), pDeqThresh2->load(), pDeqRange2->load());
+        spectral.setParameters (pSpectralAmount->load() * 0.01f, pSpectralTilt->load() * 0.01f);
 
         widthSmoothed .setTargetValue (pWidth->load()  * 0.01f);
         mixSmoothed   .setTargetValue (pMix->load()    * 0.01f);
@@ -262,6 +321,8 @@ namespace pp
                          && (StereoMode) (int) std::round (pStereoMode->load()) == StereoMode::MidSide;
         const bool mbOn   = pMultiband->load() > 0.5f;
         const bool agOn   = pAutoGain->load()  > 0.5f;
+        const bool deqOn  = pDynEqOn->load()   > 0.5f;
+        const bool specOn = pSpectralOn->load() > 0.5f;
 
         // ---- nonlinear core (oversampled, optionally Mid/Side) ----------------
         if (msMode)
@@ -282,6 +343,12 @@ namespace pp
 
         if (msMode)
             decodeMidSide (buffer);
+
+        // ---- host-rate PRO stages --------------------------------------------
+        if (deqOn)
+            dynamicEq.process (block);
+        if (specOn)
+            spectral.process (block);
 
         // ---- host-rate stages ------------------------------------------------
         applyWidth (buffer);

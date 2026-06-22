@@ -46,7 +46,7 @@ namespace pp
                          const juce::String& labelText);
         void setupToggle (juce::ToggleButton&, juce::Label&, const juce::String& paramID,
                           std::unique_ptr<APVTS::ButtonAttachment>&, const juce::String& labelText);
-        void setPage (bool pro);
+        void setPage (int page);
         void layoutGrid (juce::Rectangle<int> area, const std::vector<Knob*>& knobs, int cols, int rows);
 
         PicklePowerProcessor& processorRef;
@@ -69,10 +69,11 @@ namespace pp
         juce::ToggleButton bypassButton;
         std::unique_ptr<APVTS::ButtonAttachment> bypassAttachment;
 
-        // PRO page
-        juce::TextButton tabMain { "MAIN" }, tabPro { "PRO" };
-        bool showingPro = false;
+        // Tabbed pages: 0 = MAIN, 1 = PRO, 2 = EQ
+        juce::TextButton tabMain { "MAIN" }, tabPro { "PRO" }, tabEq { "EQ" };
+        int currentPage = 0;
 
+        // PRO page
         juce::ComboBox stereoModeBox;
         juce::Label    stereoModeLabel;
         std::unique_ptr<APVTS::ComboBoxAttachment> stereoModeAttachment;
@@ -83,6 +84,13 @@ namespace pp
 
         Knob mbLow, mbMid, mbHigh, mbFreqLow, mbFreqHigh;
 
+        // EQ page (Dynamic EQ + Spectral Saturation)
+        juce::ToggleButton dynEqButton, spectralButton;
+        juce::Label        dynEqLabel,  spectralLabel;
+        std::unique_ptr<APVTS::ButtonAttachment> dynEqAttachment, spectralAttachment;
+
+        Knob deqFreq1, deqThr1, deqRng1, deqFreq2, deqThr2, deqRng2, specAmount, specTilt;
+
         juce::Rectangle<int> panelArea;
         bool lastNuclear = false;
 
@@ -91,7 +99,7 @@ namespace pp
         // audio path; useful for demos and screenshots.
         bool  demoMode  = false;
         float demoPhase = 0.0f;
-        bool  startOnProPage = false;
+        int   startPage = 0;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PicklePowerEditor)
     };
