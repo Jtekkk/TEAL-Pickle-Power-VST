@@ -118,4 +118,7 @@ if(PP_BUILD_TESTS)
         PUBLIC
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
+
+    enable_testing()
+    add_test(NAME DspSmokeTest COMMAND PicklePowerTest)
 endif()

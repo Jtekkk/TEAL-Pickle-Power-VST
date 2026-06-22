@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, master, "claude/**" ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux,   os: ubuntu-latest }
+          - { name: macOS,   os: macos-latest }
+          - { name: Windows, os: windows-latest }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libx11-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxcursor-dev libxcomposite-dev libfreetype6-dev libfontconfig1-dev \
+            libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DPP_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Test (DSP smoke test)
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload plugin artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PicklePower-${{ runner.os }}
+          path: build/PicklePower_artefacts/Release/**
+          if-no-files-found: error
+
+      # ---- packaging (zip/tar always; native installers best-effort) ----
+      - name: Package (zip / tar)
+        shell: bash
+        run: |
+          cd build/PicklePower_artefacts/Release
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "../../../PicklePower-${{ runner.os }}.zip" ./*
+          else
+            tar -czf "../../../PicklePower-${{ runner.os }}.tar.gz" ./*
+          fi
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PicklePower-${{ runner.os }}-package
+          path: |
+            PicklePower-${{ runner.os }}.zip
+            PicklePower-${{ runner.os }}.tar.gz
+          if-no-files-found: ignore
+
+      - name: Build Windows installer (Inno Setup)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\windows\PicklePower.iss
+
+      - name: Build macOS installer (.pkg)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: bash packaging/macos/build_pkg.sh
+
+      - name: Upload native installer
+        if: runner.os != 'Linux'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: PicklePower-${{ runner.os }}-installer
+          path: |
+            packaging/windows/Output/*.exe
+            *.pkg
+          if-no-files-found: ignore
