@@ -4,19 +4,20 @@
     Pickle Power 🥒⚡  —  PRO
     DynamicEQ.h
 
-    Two dynamic EQ bands. Each band uses the peaking-from-bandpass identity
-
-        peak(x) = x + (G - 1) * BP(x)
-
-    where BP is a constant-0 dB bandpass, so the band gain G can change per sample
-    with just a multiply-add (no biquad coefficient recompute). G is driven by the
-    level inside the band relative to a threshold:
+    Two dynamic EQ bands. Each band is a Cytomic TPT (topology-preserving
+    transform) state-variable **bell** filter whose gain G is modulated per sample
+    by a level detector keyed on the band (a separate constant-0 dB band-pass
+    sidechain → envelope → gain computer). The SVF bell models both **boost and
+    cut** correctly with the true peaking Q (unlike the cheap peak = x+(G-1)*BP
+    identity, which mis-models cuts and needs a gain-dependent Q correction), and
+    is well-behaved under per-sample gain modulation and in single precision.
 
         Range > 0  -> boost the band when it exceeds the threshold (upward)
         Range < 0  -> cut the band when it exceeds the threshold (downward / de-ess)
 
-    Detection is mono-linked so the stereo image is preserved. At Range = 0 the
-    stage is transparent.
+    Detection is mono-linked. At Range = 0 the stage is exactly transparent.
+
+    Ref: Cytomic "SvfLinearTrapOptimised2"; RBJ Audio-EQ-Cookbook (detection BPF).
 
     ==============================================================================
 */
@@ -39,14 +40,15 @@ namespace pp
             sampleRate = newSampleRate;
             numCh = juce::jmax (1, channels);
 
-            attC = tc (5.0f);
-            relC = tc (90.0f);
+            attC  = tc (5.0f);
+            relC  = tc (90.0f);
             gainC = tc (8.0f);
 
             for (auto& b : bands)
             {
-                b.z1.assign ((size_t) numCh, 0.0f);
-                b.z2.assign ((size_t) numCh, 0.0f);
+                b.s1.assign ((size_t) numCh, 0.0f);
+                b.s2.assign ((size_t) numCh, 0.0f);
+                b.bz1 = b.bz2 = 0.0f;
                 b.env = 0.0f;
                 b.gainDb = 0.0f;
                 updateCoeffs (b);
@@ -57,8 +59,9 @@ namespace pp
         {
             for (auto& b : bands)
             {
-                std::fill (b.z1.begin(), b.z1.end(), 0.0f);
-                std::fill (b.z2.begin(), b.z2.end(), 0.0f);
+                std::fill (b.s1.begin(), b.s1.end(), 0.0f);
+                std::fill (b.s2.begin(), b.s2.end(), 0.0f);
+                b.bz1 = b.bz2 = 0.0f;
                 b.env = 0.0f;
                 b.gainDb = 0.0f;
             }
@@ -83,35 +86,52 @@ namespace pp
         {
             const auto chs = juce::jmin ((int) block.getNumChannels(), numCh);
             const auto numS = block.getNumSamples();
+            if (chs == 0) return;
+            const float inv = 1.0f / (float) chs;
 
             for (size_t s = 0; s < numS; ++s)
             {
+                // Mono detection signal from the (current) input.
+                float mono = 0.0f;
+                for (int ch = 0; ch < chs; ++ch)
+                    mono += block.getChannelPointer ((size_t) ch)[s];
+                mono *= inv;
+
                 for (auto& b : bands)
                 {
-                    float det = 0.0f;
-                    float bp[8] = { 0 };
+                    // --- detection: constant-0 dB band-pass + envelope ---
+                    const float bp = b.bb0 * mono + b.bz1;
+                    b.bz1 = b.bb1 * mono - b.ba1 * bp + b.bz2;
+                    b.bz2 = b.bb2 * mono - b.ba2 * bp;
 
-                    for (int ch = 0; ch < chs; ++ch)
-                    {
-                        const float x = block.getChannelPointer ((size_t) ch)[s];
-                        const float y = b.b0 * x + b.z1[(size_t) ch];
-                        b.z1[(size_t) ch] = b.b1 * x - b.a1 * y + b.z2[(size_t) ch];
-                        b.z2[(size_t) ch] = b.b2 * x - b.a2 * y;
-                        bp[ch] = y;
-                        det = juce::jmax (det, std::abs (y));
-                    }
-
-                    const float c = (det > b.env) ? attC : relC;
-                    b.env = c * b.env + (1.0f - c) * det;
+                    const float rect = std::abs (bp);
+                    const float c = (rect > b.env) ? attC : relC;
+                    b.env = c * b.env + (1.0f - c) * rect;
 
                     const float over = juce::Decibels::gainToDecibels (b.env, -100.0f) - b.thresholdDb;
                     const float amt  = juce::jlimit (0.0f, 1.0f, over / 18.0f);
-                    const float target = b.rangeDb * amt;
-                    b.gainDb = gainC * b.gainDb + (1.0f - gainC) * target;
+                    b.gainDb = gainC * b.gainDb + (1.0f - gainC) * (b.rangeDb * amt);
 
-                    const float g = juce::Decibels::decibelsToGain (b.gainDb) - 1.0f;
+                    // --- SVF bell coefficients from the current gain ---
+                    const float A  = std::pow (10.0f, b.gainDb / 40.0f);   // A^2 = linear band gain
+                    const float k  = 1.0f / (Q * A);
+                    const float a1 = 1.0f / (1.0f + b.g * (b.g + k));
+                    const float a2 = b.g * a1;
+                    const float a3 = b.g * a2;
+                    const float m1 = k * (A * A - 1.0f);
+
+                    // --- apply the bell per channel (m0 = 1, m2 = 0) ---
                     for (int ch = 0; ch < chs; ++ch)
-                        block.getChannelPointer ((size_t) ch)[s] += g * bp[ch];
+                    {
+                        auto* d = block.getChannelPointer ((size_t) ch);
+                        const float v0 = d[s];
+                        const float v3 = v0 - b.s2[(size_t) ch];
+                        const float v1 = a1 * b.s1[(size_t) ch] + a2 * v3;
+                        const float v2 = b.s2[(size_t) ch] + a2 * b.s1[(size_t) ch] + a3 * v3;
+                        b.s1[(size_t) ch] = 2.0f * v1 - b.s1[(size_t) ch];
+                        b.s2[(size_t) ch] = 2.0f * v2 - b.s2[(size_t) ch];
+                        d[s] = v0 + m1 * v1;
+                    }
                 }
             }
         }
@@ -119,25 +139,33 @@ namespace pp
     private:
         struct Band
         {
-            float b0 = 0, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
-            std::vector<float> z1, z2;
+            // Detection band-pass (RBJ constant-0 dB, TDF2), single mono state.
+            float bb0 = 0, bb1 = 0, bb2 = 0, ba1 = 0, ba2 = 0;
+            float bz1 = 0, bz2 = 0;
+            // Application SVF bell.
+            float g = 0;                       // tan(pi*fc/fs), fixed with freq
+            std::vector<float> s1, s2;         // per-channel integrator states
+            // Control.
             float env = 0.0f, gainDb = 0.0f;
             float freq = 1000.0f, thresholdDb = -18.0f, rangeDb = 0.0f;
         };
 
         void updateCoeffs (Band& b)
         {
-            // RBJ constant-0 dB-peak band-pass.
-            const float w0 = juce::MathConstants<float>::twoPi
-                             * juce::jlimit (20.0f, (float) (sampleRate * 0.45), b.freq) / (float) sampleRate;
+            const float f  = juce::jlimit (20.0f, (float) (sampleRate * 0.45), b.freq);
+            const float w0 = juce::MathConstants<float>::twoPi * f / (float) sampleRate;
+
+            // Detection: RBJ constant-0 dB band-pass.
             const float alpha = std::sin (w0) / (2.0f * Q);
             const float a0 = 1.0f + alpha;
+            b.bb0 = alpha / a0;
+            b.bb1 = 0.0f;
+            b.bb2 = -alpha / a0;
+            b.ba1 = (-2.0f * std::cos (w0)) / a0;
+            b.ba2 = (1.0f - alpha) / a0;
 
-            b.b0 = alpha / a0;
-            b.b1 = 0.0f;
-            b.b2 = -alpha / a0;
-            b.a1 = (-2.0f * std::cos (w0)) / a0;
-            b.a2 = (1.0f - alpha) / a0;
+            // Application: TPT SVF prewarped frequency.
+            b.g = std::tan (juce::MathConstants<float>::pi * f / (float) sampleRate);
         }
 
         float tc (float ms) const noexcept

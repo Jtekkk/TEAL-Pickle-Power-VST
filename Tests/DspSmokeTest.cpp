@@ -286,6 +286,28 @@ int main()
         }
         check (finite, "active dynamic EQ is finite");
         check (maxPeak < 8.0f, "active dynamic EQ stays bounded (peak " + juce::String (maxPeak, 2) + ")");
+
+        // Boost vs cut on a tone at the band centre (SVF bell models both correctly).
+        auto eqRms = [&] (float rangeDb)
+        {
+            pp::DynamicEQ d;
+            d.prepare (sr, channels);
+            d.setBand (0, 1000.0f, -60.0f, rangeDb);   // low threshold -> always engaged
+            d.setBand (1, 12000.0f, 0.0f, 0.0f);       // inactive
+            juce::AudioBuffer<float> buf (channels, block);
+            float r = 0.0f;
+            for (int n = 0; n < 80; ++n)
+            {
+                fillSine (buf, sr, 1000.0f, 0.3f);
+                juce::dsp::AudioBlock<float> blk (buf);
+                d.process (blk);
+                r = buf.getRMSLevel (0, 0, block);
+            }
+            return r;
+        };
+        const float flat = eqRms (0.0f), boost = eqRms (18.0f), cut = eqRms (-18.0f);
+        check (boost > flat * 1.1f, "dyn EQ boost raises band energy ("  + juce::String (boost, 3) + ")");
+        check (cut  < flat * 0.9f, "dyn EQ cut lowers band energy ("    + juce::String (cut, 3) + ")");
     }
 
     //==========================================================================
