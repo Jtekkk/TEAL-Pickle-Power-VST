@@ -447,6 +447,62 @@ int main()
     }
 
     //==========================================================================
+    std::cout << "\nADAA anti-aliasing (Brine Spicy, base rate):" << std::endl;
+    {
+        constexpr int order = 13, N = 1 << order;          // 8192-pt FFT
+        juce::dsp::FFT fft (order);
+        const int   bin0 = (int) std::round (7000.0 * N / sr);   // bin-centred fundamental
+        const float f0   = (float) bin0 * (float) sr / (float) N;
+        const float drive = pp::BrineSaturator::driveFor (1.0f, pp::BrineType::Spicy);
+
+        auto aliasRatio = [&] (const std::vector<float>& sig)
+        {
+            std::vector<float> fd ((size_t) (2 * N), 0.0f);
+            for (int i = 0; i < N; ++i) fd[(size_t) i] = sig[(size_t) i];
+            fft.performFrequencyOnlyForwardTransform (fd.data());
+            auto isHarmonic = [&] (int bin) {
+                for (int k = 1; k <= 3; ++k) if (std::abs (bin - k * bin0) <= 2) return true;
+                return false;
+            };
+            const double fundE = (double) fd[(size_t) bin0] * fd[(size_t) bin0];
+            double aliasE = 0.0;
+            for (int bin = 50; bin < N / 2; ++bin)
+                if (! isHarmonic (bin)) aliasE += (double) fd[(size_t) bin] * fd[(size_t) bin];
+            return (float) (aliasE / juce::jmax (1.0e-12, fundE));
+        };
+
+        // Naive (no anti-aliasing): direct memoryless shaper at base rate.
+        std::vector<float> naive ((size_t) N);
+        for (int i = 0; i < N; ++i)
+        {
+            const float x = 0.9f * std::sin (juce::MathConstants<float>::twoPi * f0 * (float) i / (float) sr);
+            naive[(size_t) i] = pp::BrineSaturator::shapeFor (pp::BrineType::Spicy, x * drive);
+        }
+
+        // ADAA via BrineSaturator (brine = 1 -> mix = 1). Warm up so drive/makeup settle.
+        pp::BrineSaturator brine;
+        brine.prepare (sr, 1);
+        brine.setParameters (1.0f, pp::BrineType::Spicy);
+        std::vector<float> adaaSig ((size_t) N);
+        for (int pass = 0; pass < 4; ++pass)
+        {
+            juce::AudioBuffer<float> buf (1, N);
+            for (int i = 0; i < N; ++i)
+                buf.setSample (0, i, 0.9f * std::sin (juce::MathConstants<float>::twoPi * f0 * (float) i / (float) sr));
+            juce::dsp::AudioBlock<float> blk (buf);
+            brine.process (blk);
+            if (pass == 3)
+                for (int i = 0; i < N; ++i) adaaSig[(size_t) i] = buf.getSample (0, i);
+        }
+
+        const float naiveR = aliasRatio (naive);
+        const float adaaR  = aliasRatio (adaaSig);
+        check (adaaR < naiveR * 0.8f,
+               "ADAA lowers alias/fundamental ratio (naive " + juce::String (naiveR, 5)
+                   + " -> ADAA " + juce::String (adaaR, 5) + ")");
+    }
+
+    //==========================================================================
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED 🥒" : juce::String (failures) + " TEST(S) FAILED")
               << std::endl;
     return failures == 0 ? 0 : 1;
